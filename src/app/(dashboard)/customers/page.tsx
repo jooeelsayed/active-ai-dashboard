@@ -1,16 +1,17 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { motion } from 'framer-motion'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import toast from 'react-hot-toast'
 import {
   Users, Plus, Search, Filter, Trash2, Edit, Eye, Phone, Mail,
-  ChevronLeft, ChevronRight, RefreshCw, Download, UserCheck
+  ChevronLeft, ChevronRight, RefreshCw, Download, Upload,
+  FileSpreadsheet, X, CheckCircle2, AlertCircle, Loader2
 } from 'lucide-react'
 import {
-  formatDate, formatRelativeTime, CUSTOMER_STATUS_LABELS,
+  formatDate, CUSTOMER_STATUS_LABELS,
   CUSTOMER_STATUS_COLORS, CUSTOMER_SOURCE_LABELS, cn
 } from '@/lib/utils'
 
@@ -27,6 +28,259 @@ interface Customer {
   _count: { subscriptions: number; payments: number }
 }
 
+// ─── Excel Import Modal ────────────────────────────────────────────────
+interface ImportRow {
+  name: string
+  email?: string
+  phone?: string
+  plan?: string
+  notes?: string
+  [key: string]: string | undefined
+}
+
+function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [preview, setPreview] = useState<ImportRow[]>([])
+  const [fileName, setFileName] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [result, setResult] = useState<{ added: number; skipped: number; errors: string[] } | null>(null)
+  const [fileObj, setFileObj] = useState<File | null>(null)
+  const [dragOver, setDragOver] = useState(false)
+
+  const readFile = async (file: File) => {
+    setFileName(file.name)
+    setFileObj(file)
+    setResult(null)
+
+    // Dynamic import to avoid SSR issues
+    const XLSX = await import('xlsx')
+    const buffer = await file.arrayBuffer()
+    const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true })
+    const ws = wb.Sheets[wb.SheetNames[0]]
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
+    // Just show first 10 rows as preview
+    setPreview(rows.slice(0, 10) as ImportRow[])
+  }
+
+  const handleFilePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) readFile(file)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) readFile(file)
+  }
+
+  const handleImport = async () => {
+    if (!fileObj) return
+    setImporting(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', fileObj)
+      const res = await fetch('/api/customers/import', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (res.ok) {
+        setResult(data)
+        toast.success(`تم استيراد ${data.added} عميل بنجاح`)
+        onDone()
+      } else {
+        toast.error(data.error ?? 'فشل الاستيراد')
+      }
+    } catch {
+      toast.error('حدث خطأ في الاتصال')
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  const previewCols = preview.length > 0 ? Object.keys(preview[0]).slice(0, 6) : []
+
+  return (
+    <>
+      {/* Backdrop */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50"
+      />
+
+      {/* Modal */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.92, y: 24 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.92, y: 24 }}
+        transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
+      >
+        <div className="glass-card w-full max-w-3xl pointer-events-auto overflow-hidden max-h-[90vh] flex flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between p-5 border-b border-white/8 flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-green-500/15 flex items-center justify-center">
+                <FileSpreadsheet className="w-5 h-5 text-green-400" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-white">استيراد عملاء من Excel</h2>
+                <p className="text-xs text-slate-500 mt-0.5">ادعم ملفات .xlsx و .xls و .csv</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="w-7 h-7 rounded-lg text-slate-400 hover:text-white hover:bg-white/8 flex items-center justify-center transition-all">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="p-5 overflow-y-auto flex-1 space-y-5">
+            {!result ? (
+              <>
+                {/* Drop zone */}
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={handleDrop}
+                  onClick={() => fileRef.current?.click()}
+                  className={cn(
+                    'border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all',
+                    dragOver
+                      ? 'border-brand-cyan bg-brand-cyan/10'
+                      : 'border-white/12 hover:border-brand-cyan/50 hover:bg-white/3'
+                  )}
+                >
+                  <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFilePick} />
+                  <Upload className={cn('w-10 h-10 mx-auto mb-3 transition-colors', dragOver ? 'text-brand-cyan' : 'text-slate-500')} />
+                  {fileName ? (
+                    <div>
+                      <p className="text-sm font-semibold text-brand-cyan">{fileName}</p>
+                      <p className="text-xs text-slate-500 mt-1">اضغط لتغيير الملف</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-sm font-semibold text-slate-300">اسحب الملف هنا أو اضغط للاختيار</p>
+                      <p className="text-xs text-slate-500 mt-1">.xlsx / .xls / .csv</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Column mapping hint */}
+                <div className="glass-card p-4 bg-blue-500/5 border border-blue-500/15 rounded-xl">
+                  <p className="text-xs font-semibold text-blue-400 mb-2 flex items-center gap-1.5">
+                    <Filter className="w-3.5 h-3.5" />
+                    الأعمدة المدعومة في الملف
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {['الاسم', 'الإيميل', 'رقم الهاتف', 'واتساب', 'الخطة المشترك فيها', 'ملاحظات', 'السعر', 'تاريخ الاشتراك', 'تاريخ الانتهاء', 'تم الدفع', 'الوالد سيبس'].map(col => (
+                      <span key={col} className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-300 text-xs font-mono">{col}</span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Preview table */}
+                {preview.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-slate-400 mb-2">
+                      معاينة أول {Math.min(preview.length, 10)} صفوف
+                    </p>
+                    <div className="overflow-x-auto rounded-xl border border-white/8">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-white/8 bg-navy-700/50">
+                            {previewCols.map(col => (
+                              <th key={col} className="px-3 py-2 text-right text-slate-400 font-semibold whitespace-nowrap">{col}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/4">
+                          {preview.map((row, i) => (
+                            <tr key={i} className="hover:bg-white/2 transition-colors">
+                              {previewCols.map(col => (
+                                <td key={col} className="px-3 py-2 text-slate-300 whitespace-nowrap max-w-[150px] truncate">
+                                  {String(row[col] ?? '')}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              /* Result screen */
+              <div className="text-center py-4 space-y-4">
+                <div className="w-16 h-16 rounded-2xl bg-green-500/15 flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-8 h-8 text-green-400" />
+                </div>
+                <div>
+                  <p className="text-xl font-bold text-white">اكتمل الاستيراد</p>
+                  <p className="text-slate-400 text-sm mt-1">تم معالجة الملف بنجاح</p>
+                </div>
+                <div className="flex items-center justify-center gap-6">
+                  <div className="text-center">
+                    <p className="text-3xl font-black text-green-400">{result.added}</p>
+                    <p className="text-xs text-slate-500 mt-1">تم إضافتهم</p>
+                  </div>
+                  <div className="w-px h-10 bg-white/10" />
+                  <div className="text-center">
+                    <p className="text-3xl font-black text-amber-400">{result.skipped}</p>
+                    <p className="text-xs text-slate-500 mt-1">تم تخطيهم</p>
+                  </div>
+                </div>
+                {result.errors.length > 0 && (
+                  <div className="glass-card p-3 bg-red-500/5 border border-red-500/15 rounded-xl text-right">
+                    <p className="text-xs text-red-400 font-semibold mb-1.5 flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      أخطاء في {result.errors.length} صف
+                    </p>
+                    <div className="space-y-0.5 max-h-24 overflow-y-auto">
+                      {result.errors.map((e, i) => (
+                        <p key={i} className="text-xs text-red-300/70">{e}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center gap-3 p-5 border-t border-white/8 flex-shrink-0">
+            {result ? (
+              <button onClick={onClose} className="btn-brand flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl">
+                <CheckCircle2 className="w-4 h-4" />
+                تم
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={handleImport}
+                  disabled={!fileObj || importing}
+                  className="btn-brand flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl disabled:opacity-60"
+                >
+                  {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  {importing ? 'جارٍ الاستيراد...' : `استيراد ${preview.length > 0 ? `(${preview.length}+ صف)` : ''}`}
+                </button>
+                <button
+                  onClick={onClose}
+                  className="px-4 py-2.5 rounded-xl text-slate-400 hover:text-white bg-white/4 hover:bg-white/8 border border-white/6 transition-all text-sm"
+                >
+                  إلغاء
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    </>
+  )
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────
 export default function CustomersPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -35,6 +289,7 @@ export default function CustomersPage() {
   const [total, setTotal] = useState(0)
   const [pages, setPages] = useState(1)
   const [userRole, setUserRole] = useState<string>('')
+  const [showImport, setShowImport] = useState(false)
 
   const page = parseInt(searchParams.get('page') ?? '1')
   const search = searchParams.get('search') ?? ''
@@ -66,7 +321,6 @@ export default function CustomersPage() {
 
   useEffect(() => { fetchCustomers() }, [fetchCustomers])
 
-  // Get user role for permission checks
   useEffect(() => {
     fetch('/api/auth/session').then(r => r.json()).then(s => {
       setUserRole(s?.user?.role ?? '')
@@ -132,6 +386,14 @@ export default function CustomersPage() {
               <span className="hidden sm:inline">تصدير CSV</span>
             </button>
           )}
+          {/* Import Excel Button */}
+          <button
+            onClick={() => setShowImport(true)}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-green-300 hover:text-green-100 bg-green-500/10 hover:bg-green-500/20 border border-green-500/25 hover:border-green-500/50 transition-all"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span className="hidden sm:inline">استيراد Excel</span>
+          </button>
           <Link
             href="/customers/new"
             className="btn-brand flex items-center gap-2 px-4 py-2 rounded-xl text-sm"
@@ -206,11 +468,20 @@ export default function CustomersPage() {
           <div className="p-16 text-center">
             <Users className="w-12 h-12 text-slate-600 mx-auto mb-3" />
             <p className="text-slate-400 text-lg font-semibold">لا يوجد عملاء</p>
-            <p className="text-slate-600 text-sm mt-1">ابدأ بإضافة عميل جديد</p>
-            <Link href="/customers/new" className="btn-brand inline-flex items-center gap-2 mt-4 px-4 py-2 rounded-xl text-sm">
-              <Plus className="w-4 h-4" />
-              إضافة أول عميل
-            </Link>
+            <p className="text-slate-600 text-sm mt-1">ابدأ بإضافة عميل جديد أو استيراد من Excel</p>
+            <div className="flex items-center justify-center gap-3 mt-4">
+              <Link href="/customers/new" className="btn-brand inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm">
+                <Plus className="w-4 h-4" />
+                إضافة عميل
+              </Link>
+              <button
+                onClick={() => setShowImport(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-green-300 bg-green-500/10 border border-green-500/25 hover:bg-green-500/20 transition-all"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                استيراد Excel
+              </button>
+            </div>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -331,6 +602,18 @@ export default function CustomersPage() {
           </button>
         </div>
       )}
+
+      {/* Import Modal */}
+      <AnimatePresence>
+        {showImport && (
+          <ImportModal
+            onClose={() => setShowImport(false)}
+            onDone={() => {
+              fetchCustomers()
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

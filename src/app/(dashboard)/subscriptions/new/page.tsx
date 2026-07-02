@@ -4,9 +4,10 @@ import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
-import { ShoppingCart, Loader2, ArrowRight, Eye, EyeOff, Lock } from 'lucide-react'
+import { ShoppingCart, Loader2, ArrowRight, Eye, EyeOff, Lock, UserPlus } from 'lucide-react'
 import Link from 'next/link'
 import { formatDate } from '@/lib/utils'
+import QuickAddCustomerModal from '@/components/QuickAddCustomerModal'
 
 interface Customer { id: string; name: string }
 interface Product { id: string; name: string; provider: string; sellingPrice: number; costPrice: number; durationDays: number }
@@ -20,6 +21,7 @@ export default function NewSubscriptionPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [showSensitive, setShowSensitive] = useState(false)
+  const [showQuickAdd, setShowQuickAdd] = useState(false)
 
   const [form, setForm] = useState({
     customerId: preCustomerId, productId: '', employeeId: '',
@@ -114,10 +116,20 @@ export default function NewSubscriptionPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-semibold text-slate-300 mb-1.5">العميل <span className="text-red-400">*</span></label>
-              <select required className="input-brand" {...field('customerId')}>
-                <option value="">اختر العميل</option>
-                {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <div className="flex gap-2">
+                <select required className="input-brand flex-1" {...field('customerId')}>
+                  <option value="">اختر العميل</option>
+                  {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setShowQuickAdd(true)}
+                  title="إضافة عميل جديد سريع"
+                  className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-brand-cyan/10 hover:bg-brand-cyan/20 border border-brand-cyan/30 hover:border-brand-cyan/60 text-brand-cyan transition-all"
+                >
+                  <UserPlus className="w-4 h-4" />
+                </button>
+              </div>
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-300 mb-1.5">المنتج / الخدمة <span className="text-red-400">*</span></label>
@@ -243,6 +255,16 @@ export default function NewSubscriptionPage() {
           </Link>
         </div>
       </motion.form>
+
+      {/* Quick Add Customer Modal */}
+      <QuickAddCustomerModal
+        isOpen={showQuickAdd}
+        onClose={() => setShowQuickAdd(false)}
+        onCreated={(newCustomer) => {
+          setCustomers(prev => [newCustomer, ...prev])
+          setForm(prev => ({ ...prev, customerId: newCustomer.id }))
+        }}
+      />
     </div>
   )
 }
