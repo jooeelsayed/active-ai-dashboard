@@ -1,0 +1,304 @@
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&family=Cairo:wght@300;400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+:root {
+  --font-tajawal: 'Tajawal', sans-serif;
+  --font-cairo: 'Cairo', sans-serif;
+
+  /* Brand Colors */
+  --navy-950: 6 8 16;
+  --navy-900: 13 17 23;
+  --navy-800: 22 27 37;
+  --navy-700: 30 37 53;
+  --navy-600: 37 45 61;
+
+  --cyan: 34 211 238;
+  --lime: 163 230 53;
+
+  /* shadcn/ui variables (dark theme) */
+  --background: 220 15% 6%;
+  --foreground: 213 31% 91%;
+  --card: 220 13% 9%;
+  --card-foreground: 213 31% 91%;
+  --popover: 220 13% 9%;
+  --popover-foreground: 213 31% 91%;
+  --primary: 186 96% 54%;
+  --primary-foreground: 220 15% 6%;
+  --secondary: 80 73% 55%;
+  --secondary-foreground: 220 15% 6%;
+  --muted: 220 10% 15%;
+  --muted-foreground: 215 16% 57%;
+  --accent: 220 10% 15%;
+  --accent-foreground: 213 31% 91%;
+  --destructive: 0 63% 31%;
+  --destructive-foreground: 213 31% 91%;
+  --border: 220 10% 14%;
+  --input: 220 10% 14%;
+  --ring: 186 96% 54%;
+  --radius: 0.75rem;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  border-color: rgb(var(--navy-700) / 0.6);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: rgb(var(--navy-900));
+  color: rgb(248 250 252);
+  font-family: var(--font-tajawal), var(--font-cairo), system-ui, sans-serif;
+  direction: rtl;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Selection */
+::selection {
+  background: rgb(var(--cyan) / 0.3);
+  color: white;
+}
+
+/* Links */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Form elements inherit font */
+input, textarea, select, button {
+  font-family: inherit;
+}
+
+/* Remove input autofill yellow background */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: rgb(248 250 252);
+  -webkit-box-shadow: 0 0 0px 1000px rgb(var(--navy-800)) inset;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* ==================== Glass Card ==================== */
+.glass-card {
+  background: rgb(var(--navy-800) / 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgb(255 255 255 / 0.06);
+  border-radius: 1rem;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+
+.glass-card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.glass-card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+  border-color: rgb(var(--cyan) / 0.2);
+}
+
+/* ==================== Gradient Text ==================== */
+.gradient-text {
+  background: linear-gradient(135deg, #22d3ee 0%, #a3e635 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-text-white {
+  background: linear-gradient(135deg, #ffffff 0%, rgb(var(--cyan)) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ==================== Glow Effects ==================== */
+.glow-cyan {
+  box-shadow: 0 0 20px rgb(var(--cyan) / 0.3);
+}
+
+.glow-lime {
+  box-shadow: 0 0 20px rgb(var(--lime) / 0.3);
+}
+
+/* ==================== Brand Button ==================== */
+.btn-brand {
+  background: linear-gradient(135deg, rgb(var(--cyan)) 0%, rgb(var(--lime)) 100%);
+  color: rgb(var(--navy-900));
+  font-weight: 700;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 15px rgb(var(--cyan) / 0.3);
+}
+
+.btn-brand:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 25px rgb(var(--cyan) / 0.4);
+}
+
+/* ==================== Stat Card Glow ==================== */
+.stat-card-cyan {
+  background: linear-gradient(135deg, rgb(var(--navy-800)) 0%, rgb(var(--cyan) / 0.08) 100%);
+  border-color: rgb(var(--cyan) / 0.2);
+}
+
+.stat-card-lime {
+  background: linear-gradient(135deg, rgb(var(--navy-800)) 0%, rgb(var(--lime) / 0.08) 100%);
+  border-color: rgb(var(--lime) / 0.2);
+}
+
+/* ==================== Table ==================== */
+.table-row-hover {
+  transition: background-color 0.15s ease;
+}
+
+.table-row-hover:hover {
+  background: rgb(var(--cyan) / 0.04);
+}
+
+/* ==================== Sidebar ==================== */
+.sidebar-item-active {
+  background: linear-gradient(135deg, rgb(var(--cyan) / 0.15) 0%, rgb(var(--lime) / 0.08) 100%);
+  border-right: 3px solid rgb(var(--cyan));
+  color: rgb(var(--cyan));
+}
+
+.sidebar-item {
+  transition: all 0.2s ease;
+  border-right: 3px solid transparent;
+}
+
+.sidebar-item:hover {
+  background: rgb(255 255 255 / 0.04);
+  color: rgb(var(--cyan));
+}
+
+/* ==================== Status Badges ==================== */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid;
+}
+
+/* ==================== Animated Loader ==================== */
+.loader-brand {
+  border: 2px solid rgb(var(--navy-700));
+  border-top: 2px solid rgb(var(--cyan));
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ==================== Page Transitions ==================== */
+.page-enter {
+  animation: pageEnter 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ==================== Number Animation ==================== */
+.animate-number {
+  animation: countUp 0.8s ease-out;
+}
+
+@keyframes countUp {
+  from { transform: scale(0.9); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* ==================== Custom Input ==================== */
+.input-brand {
+  background: rgb(var(--navy-800));
+  border: 1px solid rgb(255 255 255 / 0.08);
+  color: rgb(248 250 252);
+  transition: all 0.2s ease;
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  width: 100%;
+  font-size: 0.95rem;
+}
+
+.input-brand:focus {
+  outline: none;
+  border-color: rgb(var(--cyan) / 0.5);
+  box-shadow: 0 0 0 3px rgb(var(--cyan) / 0.1);
+  background: rgb(var(--navy-700));
+}
+
+.input-brand::placeholder {
+  color: rgb(148 163 184 / 0.6);
+}
+
+/* ==================== Modal Overlay ==================== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.7);
+  backdrop-filter: blur(8px);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ==================== Recharts Custom ==================== */
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: rgb(var(--navy-800)) !important;
+  border: 1px solid rgb(255 255 255 / 0.1) !important;
+  border-radius: 0.5rem !important;
+}
+
+/* RTL fixes for Recharts */
+.recharts-wrapper {
+  direction: ltr;
+}
