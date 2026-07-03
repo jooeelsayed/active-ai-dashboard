@@ -11,49 +11,38 @@ export async function GET() {
   try {
     const role = session.user.role
 
-    // ADMIN: always full permissions
-    if (role === 'ADMIN') {
-      // Still load overrides to return for the settings UI
-      const settings = await prisma.settings.findFirst()
-      let overrides: Record<string, Permission[]> = {}
-      if (settings?.rolePermissions) {
-        try { overrides = JSON.parse(settings.rolePermissions) } catch { /* ignore */ }
-      }
-      return NextResponse.json({
-        role,
-        permissions: ROLE_MAX_PERMISSIONS.ADMIN,
-        overrides,
-      })
-    }
-
-    // Load both role-level overrides and per-user overrides
-    const [settings, user] = await Promise.all([
-      prisma.settings.findFirst(),
-      prisma.user.findUnique({ where: { id: session.user.id }, select: { permissionsOverride: true } }),
-    ])
-
+    // Load role-level overrides from Settings
+    const settings = await prisma.settings.findFirst()
     let roleOverrides: Record<string, Permission[]> = {}
     if (settings?.rolePermissions) {
       try { roleOverrides = JSON.parse(settings.rolePermissions) } catch { /* ignore */ }
     }
 
-    let userOverride: Permission[] | null = null
-    if (user?.permissionsOverride) {
-      try { userOverride = JSON.parse(user.permissionsOverride) } catch { /* ignore */ }
+    // ADMIN: always full permissions
+    if (role === 'ADMIN') {
+      return NextResponse.json({
+        role,
+        permissions: ROLE_MAX_PERMISSIONS.ADMIN,
+        overrides: roleOverrides,
+      })
     }
 
-    // Per-user override takes priority over role override
+    // Try per-user overrides stored in Settings (userPermissions key)
+    let userPermissions: Record<string, Permission[]> = {}
+    try {
+      const raw = (settings as Record<string, unknown> | null)?.userPermissions
+      if (typeof raw === 'string') userPermissions = JSON.parse(raw)
+    } catch { /* ignore */ }
+
     const maxPerms = ROLE_MAX_PERMISSIONS[role as keyof typeof ROLE_MAX_PERMISSIONS] ?? []
     let effectivePermissions: Permission[]
 
-    if (userOverride !== null) {
-      // User-level: filter against max ceiling
+    const userOverride = userPermissions[session.user.id]
+    if (userOverride) {
       effectivePermissions = userOverride.filter(p => maxPerms.includes(p))
     } else if (roleOverrides[role]) {
-      // Role-level override
       effectivePermissions = (roleOverrides[role] as Permission[]).filter(p => maxPerms.includes(p))
     } else {
-      // Default for role
       effectivePermissions = DEFAULT_ROLE_PERMISSIONS[role] ?? []
     }
 
@@ -83,7 +72,6 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'بيانات غير صحيحة' }, { status: 400 })
     }
 
-    // Enforce ceiling
     const maxPerms = ROLE_MAX_PERMISSIONS[role as keyof typeof ROLE_MAX_PERMISSIONS] ?? []
     const safePermissions = permissions.filter(p => maxPerms.includes(p))
 

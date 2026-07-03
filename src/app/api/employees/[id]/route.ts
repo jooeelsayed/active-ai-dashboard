@@ -18,7 +18,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     where: { id },
     select: {
       id: true, name: true, email: true, role: true, isActive: true, phone: true,
-      permissionsOverride: true,
       createdAt: true,
       _count: { select: { assignedCustomers: true, subscriptions: true, payments: true } },
     },
@@ -45,7 +44,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     isActive: z.boolean().optional(),
     phone: z.string().optional().nullable(),
     password: z.string().min(8).optional(),
-    permissionsOverride: z.string().optional(), // JSON string or "" to reset
   })
 
   try {
@@ -65,7 +63,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (data.role !== undefined) updateData.role = data.role
     if (data.isActive !== undefined) updateData.isActive = data.isActive
     if (data.phone !== undefined) updateData.phone = data.phone
-    if (data.permissionsOverride !== undefined) updateData.permissionsOverride = data.permissionsOverride
+    // permissionsOverride stored in Settings table (requires prisma db push for User column)
     if (data.password) {
       // Only ADMIN can reset passwords
       if (session.user.role !== 'ADMIN') {
@@ -77,7 +75,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const employee = await prisma.user.update({
       where: { id },
       data: updateData,
-      select: { id: true, name: true, email: true, role: true, isActive: true, permissionsOverride: true },
+      select: { id: true, name: true, email: true, role: true, isActive: true },
     })
 
     await logActivity({

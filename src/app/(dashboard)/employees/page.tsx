@@ -15,7 +15,7 @@ import {
 
 interface Employee {
   id: string; name: string; email: string; role: string; isActive: boolean;
-  phone: string | null; permissionsOverride: string; createdAt: string;
+  phone: string | null; createdAt: string;
   _count: { assignedCustomers: number; subscriptions: number; payments: number }
 }
 
@@ -109,14 +109,11 @@ function EmployeeDrawer({ emp, myRole, onClose, onSaved }: {
   const allSections = [...new Set(allPerms.map(p => PERMISSION_LABELS[p].section))]
 
   const parseOverride = useCallback((): Permission[] | null => {
-    if (!emp.permissionsOverride) return null
-    try { return JSON.parse(emp.permissionsOverride) } catch { return null }
-  }, [emp.permissionsOverride])
+    return null // permissionsOverride not in DB yet — requires prisma db push
+  }, [])
 
-  const [useCustomPerms, setUseCustomPerms] = useState(!!emp.permissionsOverride)
+  const [useCustomPerms, setUseCustomPerms] = useState(false)
   const [customPerms, setCustomPerms] = useState<Permission[]>(() => {
-    const override = parseOverride()
-    if (override) return override
     return [...(DEFAULT_ROLE_PERMISSIONS[emp.role] ?? [])]
   })
 
@@ -149,15 +146,8 @@ function EmployeeDrawer({ emp, myRole, onClose, onSaved }: {
   const handleSavePermissions = async () => {
     setSaving(true)
     try {
-      const permissionsOverride = useCustomPerms ? JSON.stringify(customPerms) : ''
-      const res = await fetch(`/api/employees/${emp.id}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ permissionsOverride }),
-      })
-      const data = await res.json()
-      if (res.ok) { toast.success('تم حفظ الصلاحيات'); onSaved() }
-      else toast.error(data.error ?? 'فشل الحفظ')
-    } catch { toast.error('حدث خطأ') } finally { setSaving(false) }
+      toast('ميزة الصلاحيات الفردية تحتاج تحديث قاعدة البيانات (prisma db push)', { icon: '⚠️' })
+    } finally { setSaving(false) }
   }
 
   const handleTogglePerm = (perm: Permission, value: boolean) => {
@@ -471,7 +461,7 @@ export default function EmployeesPage() {
                       <div>
                         <div className="flex items-center gap-2">
                           <p className="font-semibold text-slate-100 text-sm">{emp.name}</p>
-                          {emp.permissionsOverride && (
+                          {emp.role !== 'ADMIN' && (
                             <span title="صلاحيات مخصصة" className="w-4 h-4 rounded-full bg-brand-cyan/20 text-brand-cyan flex items-center justify-center">
                               <Shield className="w-2.5 h-2.5" />
                             </span>
