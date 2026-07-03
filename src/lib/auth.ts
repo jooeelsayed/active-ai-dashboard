@@ -1,4 +1,5 @@
 import NextAuth from 'next-auth'
+import 'next-auth/jwt'
 import Credentials from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
@@ -22,7 +23,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id
+        token.id = user.id as string
         token.role = (user as { role: Role }).role
         token.name = user.name
       }

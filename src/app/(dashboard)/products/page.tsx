@@ -111,8 +111,6 @@ export default function ProductsPage() {
     } catch { toast.error('حدث خطأ') } finally { setBulkLoading(false) }
   }
 
-  const canEdit = userRole === 'ADMIN' || userRole === 'MANAGER'
-  const profit = (Number(form.sellingPrice) - Number(form.costPrice))
 
   return (
     <div className="space-y-6 page-enter">
