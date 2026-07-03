@@ -6,22 +6,24 @@ import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { ShoppingCart, Loader2, ArrowRight, Eye, EyeOff, Lock, UserPlus } from 'lucide-react'
 import Link from 'next/link'
-import { formatDate } from '@/lib/utils'
+import { PRODUCT_CATEGORY_LABELS } from '@/lib/utils'
 import QuickAddCustomerModal from '@/components/QuickAddCustomerModal'
 
 interface Customer { id: string; name: string }
-interface Product { id: string; name: string; provider: string; sellingPrice: number; costPrice: number; durationDays: number }
+interface Product { id: string; name: string; provider: string; category: string; sellingPrice: number; costPrice: number; durationDays: number }
 
 export default function NewSubscriptionPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const preCustomerId = searchParams.get('customerId') ?? ''
+  const preCategory = searchParams.get('category') ?? ''
 
   const [loading, setLoading] = useState(false)
   const [customers, setCustomers] = useState<Customer[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [showSensitive, setShowSensitive] = useState(false)
   const [showQuickAdd, setShowQuickAdd] = useState(false)
+  const [categoryFilter, setCategoryFilter] = useState(preCategory)
 
   const [form, setForm] = useState({
     customerId: preCustomerId, productId: '', employeeId: '',
@@ -42,6 +44,10 @@ export default function NewSubscriptionPage() {
       setProducts(Array.isArray(pData) ? pData : [])
     }).catch(() => {})
   }, [])
+
+  const filteredProducts = categoryFilter
+    ? products.filter(p => p.category === categoryFilter)
+    : products
 
   const handleProductChange = (productId: string) => {
     const product = products.find(p => p.id === productId)
@@ -131,12 +137,30 @@ export default function NewSubscriptionPage() {
                 </button>
               </div>
             </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-300 mb-1.5">المنتج / الخدمة <span className="text-red-400">*</span></label>
-              <select required className="input-brand" value={form.productId} onChange={e => handleProductChange(e.target.value)}>
-                <option value="">اختر المنتج</option>
-                {products.map(p => <option key={p.id} value={p.id}>{p.name} — {p.provider}</option>)}
-              </select>
+            <div className="space-y-2">
+              <div>
+                <label className="block text-sm font-semibold text-slate-300 mb-1.5">تصنيف المنتج</label>
+                <select
+                  className="input-brand"
+                  value={categoryFilter}
+                  onChange={e => { setCategoryFilter(e.target.value); setForm(prev => ({ ...prev, productId: '' })) }}
+                >
+                  <option value="">كل التصنيفات</option>
+                  {Object.entries(PRODUCT_CATEGORY_LABELS).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-300 mb-1.5">المنتج / الخدمة <span className="text-red-400">*</span></label>
+                <select required className="input-brand" value={form.productId} onChange={e => handleProductChange(e.target.value)}>
+                  <option value="">اختر المنتج</option>
+                  {filteredProducts.map(p => <option key={p.id} value={p.id}>{p.name} — {p.provider}</option>)}
+                </select>
+                {categoryFilter && filteredProducts.length === 0 && (
+                  <p className="text-xs text-amber-400 mt-1">لا توجد منتجات في هذا التصنيف</p>
+                )}
+              </div>
             </div>
           </div>
         </div>
