@@ -108,14 +108,29 @@ function EmployeeDrawer({ emp, myRole, onClose, onSaved }: {
   const allPerms = Object.keys(PERMISSION_LABELS) as Permission[]
   const allSections = [...new Set(allPerms.map(p => PERMISSION_LABELS[p].section))]
 
-  const parseOverride = useCallback((): Permission[] | null => {
-    return null // permissionsOverride not in DB yet — requires prisma db push
-  }, [])
-
   const [useCustomPerms, setUseCustomPerms] = useState(false)
-  const [customPerms, setCustomPerms] = useState<Permission[]>(() => {
-    return [...(DEFAULT_ROLE_PERMISSIONS[emp.role] ?? [])]
-  })
+  const [customPerms, setCustomPerms] = useState<Permission[]>([...(DEFAULT_ROLE_PERMISSIONS[emp.role] ?? [])])
+  const [loadingPerms, setLoadingPerms] = useState(true)
+
+  // Load this employee's current effective permissions + check if they have a custom override
+  useEffect(() => {
+    setLoadingPerms(true)
+    fetch('/api/permissions')
+      .then(r => r.json())
+      .then(data => {
+        const userKey = `user:${emp.id}`
+        const hasOverride = !!data.overrides?.[userKey]
+        if (hasOverride) {
+          setUseCustomPerms(true)
+          setCustomPerms((data.overrides[userKey] as Permission[]) ?? [])
+        } else {
+          setUseCustomPerms(false)
+          setCustomPerms([...(DEFAULT_ROLE_PERMISSIONS[emp.role] ?? [])])
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingPerms(false))
+  }, [emp.id, emp.role])
 
   // Reset custom perms when toggling off
   useEffect(() => {
@@ -146,8 +161,19 @@ function EmployeeDrawer({ emp, myRole, onClose, onSaved }: {
   const handleSavePermissions = async () => {
     setSaving(true)
     try {
-      toast('ميزة الصلاحيات الفردية تحتاج تحديث قاعدة البيانات (prisma db push)', { icon: '⚠️' })
-    } finally { setSaving(false) }
+      const res = await fetch('/api/permissions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          useCustomPerms
+            ? { userId: emp.id, userRole: emp.role, permissions: customPerms }
+            : { userId: emp.id, permissions: null } // reset to role defaults
+        ),
+      })
+      const data = await res.json()
+      if (res.ok) { toast.success('تم حفظ الصلاحيات'); onSaved() }
+      else toast.error(data.error ?? 'فشل الحفظ')
+    } catch { toast.error('حدث خطأ') } finally { setSaving(false) }
   }
 
   const handleTogglePerm = (perm: Permission, value: boolean) => {
@@ -312,33 +338,39 @@ function EmployeeDrawer({ emp, myRole, onClose, onSaved }: {
                 </div>
 
                 {useCustomPerms ? (
-                  <>
-                    {/* Quick actions */}
-                    <div className="flex items-center gap-2">
-                      <button type="button" onClick={() => setCustomPerms([...maxPerms])}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-brand-lime/10 text-brand-lime border border-brand-lime/20 hover:bg-brand-lime/20 transition-all">
-                        <CheckCircle2 className="w-3.5 h-3.5" />تحديد الكل
-                      </button>
-                      <button type="button" onClick={() => setCustomPerms([])}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-all">
-                        <X className="w-3.5 h-3.5" />إلغاء الكل
-                      </button>
-                      <button type="button" onClick={() => setCustomPerms([...(DEFAULT_ROLE_PERMISSIONS[form.role] ?? [])])}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-white/6 text-slate-400 border border-white/10 hover:bg-white/10 transition-all">
-                        <RotateCcw className="w-3.5 h-3.5" />إعادة ضبط الدور
-                      </button>
+                  loadingPerms ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-brand-cyan" />
                     </div>
+                  ) : (
+                    <>
+                      {/* Quick actions */}
+                      <div className="flex items-center gap-2">
+                        <button type="button" onClick={() => setCustomPerms([...maxPerms])}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-brand-lime/10 text-brand-lime border border-brand-lime/20 hover:bg-brand-lime/20 transition-all">
+                          <CheckCircle2 className="w-3.5 h-3.5" />تحديد الكل
+                        </button>
+                        <button type="button" onClick={() => setCustomPerms([])}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-all">
+                          <X className="w-3.5 h-3.5" />إلغاء الكل
+                        </button>
+                        <button type="button" onClick={() => setCustomPerms([...(DEFAULT_ROLE_PERMISSIONS[form.role] ?? [])])}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-white/6 text-slate-400 border border-white/10 hover:bg-white/10 transition-all">
+                          <RotateCcw className="w-3.5 h-3.5" />إعادة ضبط الدور
+                        </button>
+                      </div>
 
-                    {/* Permission sections */}
-                    <div className="space-y-2">
-                      {allSections.map(section => (
-                        <PermSection
-                          key={section} section={section} allPerms={allPerms}
-                          enabled={customPerms} maxAllowed={maxPerms} onChange={handleTogglePerm}
-                        />
-                      ))}
-                    </div>
-                  </>
+                      {/* Permission sections */}
+                      <div className="space-y-2">
+                        {allSections.map(section => (
+                          <PermSection
+                            key={section} section={section} allPerms={allPerms}
+                            enabled={customPerms} maxAllowed={maxPerms} onChange={handleTogglePerm}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )
                 ) : (
                   <div className="glass-card p-6 text-center space-y-2">
                     <Shield className="w-10 h-10 text-slate-600 mx-auto" />
