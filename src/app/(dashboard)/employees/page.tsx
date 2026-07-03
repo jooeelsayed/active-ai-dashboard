@@ -6,7 +6,7 @@ import toast from 'react-hot-toast'
 import {
   UserCog, Plus, Edit2, Power, Key, Trash2, Loader2,
   Shield, User, Mail, Phone, X, Eye, EyeOff, ChevronDown, ChevronUp,
-  Lock, Unlock, CheckCircle2, AlertTriangle, Save, RotateCcw
+  Lock, Unlock, CheckCircle2, AlertTriangle, Save, RotateCcw, RefreshCw
 } from 'lucide-react'
 import { formatDate, ROLE_LABELS, cn } from '@/lib/utils'
 import {
