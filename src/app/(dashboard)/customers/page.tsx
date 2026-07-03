@@ -515,7 +515,7 @@ export default function CustomersPage() {
               <thead>
                 <tr className="border-b border-white/6">
                   <th className="px-3 py-3 w-10">
-                    <button onClick={toggleAll} className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-white transition-colors">
+                    <button type="button" onClick={toggleAll} className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-white transition-colors">
                       {allSelected ? <CheckSquare className="w-4 h-4 text-brand-cyan" /> :
                         someSelected ? <Minus className="w-4 h-4 text-brand-cyan" /> :
                         <Square className="w-4 h-4" />}
@@ -539,7 +539,7 @@ export default function CustomersPage() {
                     className={cn('table-row-hover', selected.has(customer.id) && 'bg-brand-cyan/5')}
                   >
                     <td className="px-3 py-3">
-                      <button onClick={() => toggleOne(customer.id)} className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-white transition-colors">
+                      <button type="button" onClick={() => toggleOne(customer.id)} className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-white transition-colors">
                         {selected.has(customer.id) ? <CheckSquare className="w-4 h-4 text-brand-cyan" /> : <Square className="w-4 h-4" />}
                       </button>
                     </td>

@@ -24,6 +24,12 @@ export async function POST(request: Request) {
       if (!hasPermission(session.user.role, 'subscriptions:delete')) {
         return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
       }
+      
+      // Unlink to prevent foreign key errors
+      await prisma.payment.updateMany({ where: { subscriptionId: { in: data.ids } }, data: { subscriptionId: null } })
+      await prisma.note.updateMany({ where: { subscriptionId: { in: data.ids } }, data: { subscriptionId: null } })
+      await prisma.task.updateMany({ where: { subscriptionId: { in: data.ids } }, data: { subscriptionId: null } })
+
       const result = await prisma.subscription.deleteMany({ where: { id: { in: data.ids } } })
       await logActivity({
         userId: session.user.id, userName: session.user.name,

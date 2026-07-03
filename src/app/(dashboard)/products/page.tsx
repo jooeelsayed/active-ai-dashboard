@@ -25,6 +25,7 @@ export default function ProductsPage() {
   const [userRole, setUserRole] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [showInactive, setShowInactive] = useState(false)
   const [form, setForm] = useState<ProductFormState>({
     name: '', provider: '', category: 'OTHER', planName: '', durationDays: '30',
     sellingPrice: '', costPrice: '', isActive: true, accountType: 'INDIVIDUAL', description: '',
@@ -75,13 +76,15 @@ export default function ProductsPage() {
     const res = await fetch(`/api/products/${id}`, { method: 'DELETE' })
     const data = await res.json()
     if (res.ok) {
-      if (data.deactivated) toast.success(data.message)
-      else toast.success('تم الحذف')
+      toast.success('تم الحذف')
       fetchProducts()
     } else toast.error('فشل الحذف')
   }
 
-  // Bulk helpers
+  const canEdit = userRole === 'ADMIN' || userRole === 'MANAGER'
+  const profit = (Number(form.sellingPrice) - Number(form.costPrice))
+  
+  const displayedProducts = showInactive ? products : products.filter(p => p.isActive)
   const allIds = products.map(p => p.id)
   const allSelected = allIds.length > 0 && allIds.every(id => selected.has(id))
   const someSelected = selected.size > 0 && !allSelected
@@ -122,6 +125,9 @@ export default function ProductsPage() {
           <p className="text-slate-400 text-sm mt-1">{products.length} منتج مسجل</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setShowInactive(!showInactive)} className={cn("px-3 py-2 rounded-xl text-sm border transition-all", showInactive ? "bg-white/10 text-white border-white/20" : "bg-transparent text-slate-400 border-white/6 hover:bg-white/5")}>
+            {showInactive ? "إخفاء المحذوف" : "عرض المحذوف"}
+          </button>
           {canEdit && (
             <button onClick={openNew} className="btn-brand flex items-center gap-2 px-4 py-2 rounded-xl text-sm">
               <Plus className="w-4 h-4" />إضافة منتج
@@ -181,7 +187,7 @@ export default function ProductsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-48 glass-card animate-pulse bg-navy-700/40" />)}
         </div>
-      ) : products.length === 0 ? (
+      ) : displayedProducts.length === 0 ? (
         <div className="glass-card p-16 text-center">
           <Package className="w-16 h-16 text-slate-600 mx-auto mb-4" />
           <p className="text-slate-400 text-xl font-bold">لا توجد منتجات</p>
@@ -191,7 +197,7 @@ export default function ProductsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {products.map((product, i) => (
+          {displayedProducts.map((product, i) => (
             <motion.div key={product.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}
               onClick={() => toggleOne(product.id)}
               className={cn('glass-card p-5 space-y-3 cursor-pointer border transition-all', 

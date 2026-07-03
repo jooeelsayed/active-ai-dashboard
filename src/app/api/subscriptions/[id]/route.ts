@@ -113,6 +113,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   }
 
   const { id } = await params
+  
+  // Unlink associated records to prevent foreign key constraint errors
+  await prisma.payment.updateMany({ where: { subscriptionId: id }, data: { subscriptionId: null } })
+  await prisma.note.updateMany({ where: { subscriptionId: id }, data: { subscriptionId: null } })
+  await prisma.task.updateMany({ where: { subscriptionId: id }, data: { subscriptionId: null } })
+
   await prisma.subscription.delete({ where: { id } })
 
   await logActivity({
