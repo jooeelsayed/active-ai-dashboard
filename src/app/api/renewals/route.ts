@@ -68,8 +68,8 @@ export async function GET() {
     }),
   ])
 
-  // Fetch WhatsApp template from settings
-  const settings = await prisma.settings.findFirst()
+  // Fetch WhatsApp template from settings (select only whatsappTemplate to avoid DB schema mismatch errors)
+  const settings = await prisma.settings.findFirst({ select: { whatsappTemplate: true } })
   const template = settings?.whatsappTemplate ?? 'أهلاً يا {customerName} 👋\n\nاشتراك {productName} الخاص بحضرتك هينتهي يوم {endDate}.\n\nتحب نجددلك الاشتراك؟'
 
   return NextResponse.json({
