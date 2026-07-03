@@ -101,7 +101,7 @@ export async function PATCH(request: Request) {
     overrides[role] = permissions.filter(p => maxPerms.includes(p))
     await saveOverrides(settingsId, overrides)
     return NextResponse.json({ success: true, overrides })
-  } catch {
-    return NextResponse.json({ error: 'خطأ في الخادم' }, { status: 500 })
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message || 'خطأ في الخادم' }, { status: 500 })
   }
 }
