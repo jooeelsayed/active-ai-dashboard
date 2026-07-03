@@ -15,6 +15,7 @@ import {
   formatDate, CUSTOMER_STATUS_LABELS,
   CUSTOMER_STATUS_COLORS, CUSTOMER_SOURCE_LABELS, cn
 } from '@/lib/utils'
+import { usePermissions } from '@/lib/usePermissions'
 
 interface Customer {
   id: string
@@ -285,11 +286,11 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
 export default function CustomersPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { can } = usePermissions()
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
   const [pages, setPages] = useState(1)
-  const [userRole, setUserRole] = useState<string>('')
   const [showImport, setShowImport] = useState(false)
   // Bulk selection
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -326,11 +327,7 @@ export default function CustomersPage() {
 
   useEffect(() => { fetchCustomers(); setSelected(new Set()) }, [fetchCustomers])
 
-  useEffect(() => {
-    fetch('/api/auth/session').then(r => r.json()).then(s => {
-      setUserRole(s?.user?.role ?? '')
-    }).catch(() => {})
-  }, [])
+
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -419,7 +416,7 @@ export default function CustomersPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {(userRole === 'ADMIN' || userRole === 'MANAGER') && (
+          {can('reports:export') && (
             <button
               onClick={handleExport}
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-slate-300 hover:text-white bg-navy-700/60 hover:bg-navy-700 border border-white/6 transition-all"
@@ -490,7 +487,7 @@ export default function CustomersPage() {
               </div>
 
               {/* Bulk Delete */}
-              {(userRole === 'ADMIN' || userRole === 'MANAGER') && (
+              {can('customers:delete') && (
                 <button
                   onClick={handleBulkDelete}
                   disabled={bulkLoading}
@@ -681,7 +678,7 @@ export default function CustomersPage() {
                         >
                           <Edit className="w-4 h-4" />
                         </Link>
-                        {(userRole === 'ADMIN' || userRole === 'MANAGER') && (
+                        {can('customers:delete') && (
                           <button
                             onClick={() => handleDelete(customer.id, customer.name)}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all"

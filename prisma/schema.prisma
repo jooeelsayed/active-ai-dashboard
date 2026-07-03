@@ -276,11 +276,12 @@ model ActivityLog {
 }
 
 model Settings {
-  id               String   @id @default(cuid())
-  companyName      String   @default("Active Ai")
-  logoPath         String   @default("/logo.png")
-  currency         String   @default("EGP")
-  reminderDays     Int      @default(7)
-  whatsappTemplate String   @default("أهلاً يا {customerName} 👋\n\nاشتراك {productName} الخاص بحضرتك هينتهي يوم {endDate}.\n\nتحب نجددلك الاشتراك؟ 🔄")
-  updatedAt        DateTime @updatedAt
+  id                  String   @id @default(cuid())
+  companyName         String   @default("Active Ai")
+  logoPath            String   @default("/logo.png")
+  currency            String   @default("EGP")
+  reminderDays        Int      @default(7)
+  whatsappTemplate    String   @default("أهلاً يا {customerName} 👋\n\nاشتراك {productName} الخاص بحضرتك هينتهي يوم {endDate}.\n\nتحب نجددلك الاشتراك؟ 🔄")
+  rolePermissions     String   @default("{}")
+  updatedAt           DateTime @updatedAt
 }
