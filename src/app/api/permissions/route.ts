@@ -102,6 +102,10 @@ export async function PATCH(request: Request) {
     await saveOverrides(settingsId, overrides)
     return NextResponse.json({ success: true, overrides })
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'خطأ في الخادم' }, { status: 500 })
+    const msg = err?.message || '';
+    if (msg.includes('Settings.rolePermissions') || msg.includes('does not exist')) {
+      return NextResponse.json({ error: 'DB_NEEDS_PUSH', details: msg }, { status: 500 })
+    }
+    return NextResponse.json({ error: msg || 'خطأ في الخادم' }, { status: 500 })
   }
 }
