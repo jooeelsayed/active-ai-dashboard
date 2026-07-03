@@ -3,11 +3,12 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Search, Bell, Plus, Menu, UserCircle, ChevronDown, LogOut, Settings } from 'lucide-react'
+import { Search, Plus, Menu, UserCircle, ChevronDown, LogOut, Settings } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import type { Role } from '@prisma/client'
+import NotificationBell from './NotificationBell'
 
 interface TopbarProps {
   user: {
@@ -114,10 +115,7 @@ export default function Topbar({ user, onMenuToggle }: TopbarProps) {
         </div>
 
         {/* Notifications */}
-        <button className="relative p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
-          <Bell className="w-5 h-5" />
-          <span className="absolute top-1 right-1 w-2 h-2 bg-brand-lime rounded-full" />
-        </button>
+        <NotificationBell />
 
         {/* User Menu */}
         <div className="relative">
