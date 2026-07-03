@@ -110,6 +110,9 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const customer = await prisma.customer.findUnique({ where: { id } })
   if (!customer) return NextResponse.json({ error: 'غير موجود' }, { status: 404 })
 
+  // Manually delete tasks (no cascade in schema)
+  await prisma.task.deleteMany({ where: { customerId: id } })
+
   await prisma.customer.delete({ where: { id } })
 
   await logActivity({

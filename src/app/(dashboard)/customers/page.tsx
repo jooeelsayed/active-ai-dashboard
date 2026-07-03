@@ -9,7 +9,7 @@ import {
   Users, Plus, Search, Filter, Trash2, Edit, Eye, Phone, Mail,
   ChevronLeft, ChevronRight, RefreshCw, Download, Upload,
   FileSpreadsheet, X, CheckCircle2, AlertCircle, Loader2,
-  CheckSquare, Square, Minus
+  CheckSquare, Square, Minus, ChevronDown
 } from 'lucide-react'
 import {
   formatDate, CUSTOMER_STATUS_LABELS,
@@ -294,6 +294,7 @@ export default function CustomersPage() {
   // Bulk selection
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkLoading, setBulkLoading] = useState(false)
+  const [showBulkMenu, setShowBulkMenu] = useState(false)
 
   const page = parseInt(searchParams.get('page') ?? '1')
   const search = searchParams.get('search') ?? ''
@@ -389,6 +390,21 @@ export default function CustomersPage() {
     } catch { toast.error('حدث خطأ') } finally { setBulkLoading(false) }
   }
 
+  const handleBulkStatusUpdate = async (newStatus: string) => {
+    setShowBulkMenu(false)
+    setBulkLoading(true)
+    try {
+      const res = await fetch('/api/customers/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selected), status: newStatus }),
+      })
+      const data = await res.json()
+      if (res.ok) { toast.success(`تم تحديث حالة ${data.affected} عميل`); fetchCustomers() }
+      else toast.error(data.error ?? 'فشل التحديث')
+    } catch { toast.error('حدث خطأ') } finally { setBulkLoading(false) }
+  }
+
   return (
     <div className="space-y-6 page-enter">
       {/* Header */}
@@ -429,6 +445,71 @@ export default function CustomersPage() {
           </Link>
         </div>
       </div>
+
+      {/* Bulk Actions Bar */}
+      <AnimatePresence>
+        {selected.size > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+            className="glass-card p-3 flex items-center gap-3 border border-brand-cyan/20 bg-brand-cyan/5"
+          >
+            <span className="text-sm font-bold text-brand-cyan">تم تحديد {selected.size} عميل</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Change Status Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowBulkMenu(v => !v)}
+                  disabled={bulkLoading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/8 hover:bg-white/12 border border-white/12 text-slate-300 transition-all disabled:opacity-60"
+                >
+                  تغيير الحالة <ChevronDown className="w-3 h-3" />
+                </button>
+                <AnimatePresence>
+                  {showBulkMenu && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowBulkMenu(false)} />
+                      <motion.div
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        className="absolute top-full mt-1 right-0 bg-navy-800 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden min-w-[160px]"
+                      >
+                        {Object.entries(CUSTOMER_STATUS_LABELS).map(([key, label]) => (
+                          <button
+                            key={key}
+                            onClick={() => handleBulkStatusUpdate(key)}
+                            className="w-full text-right px-3 py-2 text-sm text-slate-300 hover:bg-white/6 hover:text-white transition-colors"
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Bulk Delete */}
+              {(userRole === 'ADMIN' || userRole === 'MANAGER') && (
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={bulkLoading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 text-red-400 transition-all disabled:opacity-60"
+                >
+                  {bulkLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                  حذف المحدد
+                </button>
+              )}
+              <button
+                onClick={() => setSelected(new Set())}
+                className="px-3 py-1.5 rounded-lg text-xs text-slate-500 hover:text-slate-300 transition-colors"
+              >
+                إلغاء التحديد
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Filters */}
       <div className="glass-card p-4 space-y-3">
