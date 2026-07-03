@@ -1,0 +1,326 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import { motion } from 'framer-motion'
+import toast from 'react-hot-toast'
+import { ShoppingCart, Loader2, ArrowRight, Eye, EyeOff, Lock, UserPlus } from 'lucide-react'
+import Link from 'next/link'
+import { PRODUCT_CATEGORY_LABELS } from '@/lib/utils'
+import QuickAddCustomerModal from '@/components/QuickAddCustomerModal'
+
+interface Customer { id: string; name: string }
+interface Product { id: string; name: string; provider: string; category: string; sellingPrice: number; costPrice: number; durationDays: number }
+
+export default function EditSubscriptionPage() {
+  const { id } = useParams<{ id: string }>()
+  const router = useRouter()
+
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [products, setProducts] = useState<Product[]>([])
+  const [showSensitive, setShowSensitive] = useState(false)
+  const [showQuickAdd, setShowQuickAdd] = useState(false)
+  const [categoryFilter, setCategoryFilter] = useState('')
+
+  const [form, setForm] = useState({
+    customerId: '', productId: '', employeeId: '',
+    startDate: '', endDate: '', renewalReminderDate: '',
+    salePrice: '', costPrice: '',
+    paymentStatus: 'UNPAID', status: 'ACTIVE',
+    paymentMethod: 'CASH', notes: '',
+    loginEmail: '', loginPassword: '', licenseKey: '', accessLink: '',
+  })
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`/api/subscriptions/${id}`).then(r => r.json()),
+      fetch('/api/customers?limit=200').then(r => r.json()),
+      fetch('/api/products?isActive=true').then(r => r.json()),
+    ]).then(([subData, cData, pData]) => {
+      if (subData?.id) {
+        setForm({
+          customerId: subData.customer?.id ?? '',
+          productId: subData.product?.id ?? '',
+          employeeId: subData.employeeId ?? '',
+          startDate: subData.startDate ? new Date(subData.startDate).toISOString().split('T')[0] : '',
+          endDate: subData.endDate ? new Date(subData.endDate).toISOString().split('T')[0] : '',
+          renewalReminderDate: subData.renewalReminderDate ? new Date(subData.renewalReminderDate).toISOString().split('T')[0] : '',
+          salePrice: String(subData.salePrice ?? ''),
+          costPrice: String(subData.costPrice ?? ''),
+          paymentStatus: subData.paymentStatus ?? 'UNPAID',
+          status: subData.status ?? 'ACTIVE',
+          paymentMethod: subData.paymentMethod ?? 'CASH',
+          notes: subData.notes ?? '',
+          loginEmail: '', loginPassword: '', licenseKey: '', accessLink: '',
+        })
+        if (subData.product?.category) setCategoryFilter(subData.product.category)
+      }
+      setCustomers(cData.customers ?? [])
+      const allProducts = Array.isArray(pData) ? pData : []
+      // Make sure current product is included even if inactive
+      if (subData?.product && !allProducts.find((p: Product) => p.id === subData.product.id)) {
+        allProducts.unshift(subData.product)
+      }
+      setProducts(allProducts)
+      setLoading(false)
+    }).catch(() => { toast.error('فشل تحميل البيانات'); setLoading(false) })
+  }, [id])
+
+  const filteredProducts = categoryFilter ? products.filter(p => p.category === categoryFilter) : products
+  const selectedProduct = products.find(p => p.id === form.productId)
+  const profit = selectedProduct ? Number(form.salePrice) - Number(form.costPrice) : 0
+
+  const handleProductChange = (productId: string) => {
+    const product = products.find(p => p.id === productId)
+    if (product) {
+      const end = new Date()
+      end.setDate(end.getDate() + product.durationDays)
+      const reminder = new Date()
+      reminder.setDate(reminder.getDate() + product.durationDays - 7)
+      setForm(prev => ({
+        ...prev, productId,
+        salePrice: String(product.sellingPrice),
+        costPrice: String(product.costPrice),
+        endDate: end.toISOString().split('T')[0],
+        renewalReminderDate: reminder.toISOString().split('T')[0],
+      }))
+    } else {
+      setForm(prev => ({ ...prev, productId }))
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      const payload: Record<string, unknown> = { ...form }
+      // Only send sensitive fields if filled
+      if (!form.loginEmail && !form.loginPassword && !form.licenseKey && !form.accessLink) {
+        delete payload.loginEmail
+        delete payload.loginPassword
+        delete payload.licenseKey
+        delete payload.accessLink
+      }
+      const res = await fetch(`/api/subscriptions/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast.success('تم تحديث الاشتراك بنجاح')
+        router.push(`/subscriptions/${id}`)
+      } else {
+        toast.error(data.error ?? 'فشل الحفظ')
+      }
+    } catch {
+      toast.error('حدث خطأ')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const field = (key: keyof typeof form) => ({
+    value: form[key],
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+      setForm(prev => ({ ...prev, [key]: e.target.value })),
+  })
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <div className="loader-brand w-10 h-10" />
+    </div>
+  )
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-6 page-enter">
+      <div className="flex items-center gap-3">
+        <Link href={`/subscriptions/${id}`} className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 transition-all">
+          <ArrowRight className="w-5 h-5" />
+        </Link>
+        <div>
+          <h1 className="text-2xl font-black gradient-text-white flex items-center gap-2">
+            <ShoppingCart className="w-6 h-6 text-brand-cyan" />
+            تعديل الاشتراك
+          </h1>
+          <p className="text-slate-400 text-sm">عدّل بيانات الاشتراك كاملة</p>
+        </div>
+      </div>
+
+      <motion.form initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} onSubmit={handleSubmit} className="space-y-5">
+        {/* Customer & Product */}
+        <div className="glass-card p-6 space-y-4">
+          <h2 className="text-sm font-bold text-brand-cyan uppercase tracking-wider">العميل والمنتج</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-300 mb-1.5">العميل <span className="text-red-400">*</span></label>
+              <div className="flex gap-2">
+                <select required className="input-brand flex-1" {...field('customerId')}>
+                  <option value="">اختر العميل</option>
+                  {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+                <button type="button" onClick={() => setShowQuickAdd(true)} title="إضافة عميل جديد"
+                  className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-brand-cyan/10 hover:bg-brand-cyan/20 border border-brand-cyan/30 hover:border-brand-cyan/60 text-brand-cyan transition-all">
+                  <UserPlus className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div>
+                <label className="block text-sm font-semibold text-slate-300 mb-1.5">تصنيف المنتج</label>
+                <select className="input-brand" value={categoryFilter}
+                  onChange={e => { setCategoryFilter(e.target.value); setForm(prev => ({ ...prev, productId: '' })) }}>
+                  <option value="">كل التصنيفات</option>
+                  {Object.entries(PRODUCT_CATEGORY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-300 mb-1.5">المنتج / الخدمة <span className="text-red-400">*</span></label>
+                <select required className="input-brand" value={form.productId} onChange={e => handleProductChange(e.target.value)}>
+                  <option value="">اختر المنتج</option>
+                  {filteredProducts.map(p => <option key={p.id} value={p.id}>{p.name} — {p.provider}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Dates */}
+        <div className="glass-card p-6 space-y-4">
+          <h2 className="text-sm font-bold text-brand-cyan uppercase tracking-wider">التواريخ</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-300 mb-1.5">تاريخ البداية <span className="text-red-400">*</span></label>
+              <input type="date" required className="input-brand" {...field('startDate')} />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-300 mb-1.5">تاريخ الانتهاء <span className="text-red-400">*</span></label>
+              <input type="date" required className="input-brand" {...field('endDate')} />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-300 mb-1.5">تاريخ التذكير</label>
+              <input type="date" className="input-brand" {...field('renewalReminderDate')} />
+            </div>
+          </div>
+        </div>
+
+        {/* Pricing */}
+        <div className="glass-card p-6 space-y-4">
+          <h2 className="text-sm font-bold text-brand-cyan uppercase tracking-wider">التسعير والدفع</h2>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-300 mb-1.5">سعر البيع (ج.م)</label>
+              <input type="number" min="0" step="0.01" className="input-brand" {...field('salePrice')} />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-300 mb-1.5">سعر التكلفة (ج.م)</label>
+              <input type="number" min="0" step="0.01" className="input-brand" {...field('costPrice')} />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-300 mb-1.5">الربح المتوقع</label>
+              <div className={`input-brand flex items-center font-bold ${profit >= 0 ? 'text-brand-lime' : 'text-red-400'}`}>
+                {profit.toFixed(2)} ج.م
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-300 mb-1.5">حالة الاشتراك</label>
+              <select className="input-brand" {...field('status')}>
+                <option value="ACTIVE">نشط</option>
+                <option value="EXPIRING_SOON">ينتهي قريباً</option>
+                <option value="EXPIRED">منتهي</option>
+                <option value="CANCELLED">ملغي</option>
+                <option value="PENDING_SETUP">في انتظار الإعداد</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-300 mb-1.5">حالة الدفع</label>
+              <select className="input-brand" {...field('paymentStatus')}>
+                <option value="UNPAID">غير مدفوع</option>
+                <option value="PARTIALLY_PAID">مدفوع جزئياً</option>
+                <option value="PAID">مدفوع</option>
+                <option value="REFUNDED">مسترد</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-300 mb-1.5">طريقة الدفع</label>
+              <select className="input-brand" {...field('paymentMethod')}>
+                <option value="CASH">نقداً</option>
+                <option value="VODAFONE_CASH">فودافون كاش</option>
+                <option value="INSTAPAY">إنستاباي</option>
+                <option value="BANK_TRANSFER">تحويل بنكي</option>
+                <option value="PAYPAL">باي بال</option>
+                <option value="OTHER">أخرى</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Sensitive */}
+        <div className="glass-card p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-brand-cyan uppercase tracking-wider flex items-center gap-2">
+              <Lock className="w-4 h-4" />
+              بيانات تسليم الحساب (مشفرة)
+            </h2>
+            <button type="button" onClick={() => setShowSensitive(!showSensitive)}
+              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors">
+              {showSensitive ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              {showSensitive ? 'إخفاء' : 'إظهار وتعديل'}
+            </button>
+          </div>
+          {showSensitive && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in">
+              <div>
+                <label className="block text-sm font-semibold text-slate-300 mb-1.5">البريد الإلكتروني</label>
+                <input type="email" className="input-brand" placeholder="login@example.com" {...field('loginEmail')} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-300 mb-1.5">كلمة المرور</label>
+                <input type="text" className="input-brand font-mono" placeholder="اتركه فارغاً إن لم تريد تغييره" {...field('loginPassword')} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-300 mb-1.5">كود الترخيص</label>
+                <input type="text" className="input-brand font-mono" placeholder="XXXX-XXXX-XXXX" {...field('licenseKey')} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-300 mb-1.5">رابط الوصول</label>
+                <input type="url" className="input-brand" placeholder="https://..." {...field('accessLink')} />
+              </div>
+            </div>
+          )}
+          {!showSensitive && <p className="text-xs text-slate-600">اضغط "إظهار وتعديل" لتغيير بيانات الحساب المشفرة</p>}
+        </div>
+
+        {/* Notes */}
+        <div className="glass-card p-6">
+          <label className="block text-sm font-semibold text-slate-300 mb-2">ملاحظات الاشتراك</label>
+          <textarea rows={3} className="input-brand resize-none" placeholder="أي ملاحظات إضافية..." {...field('notes')} />
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-3">
+          <button type="submit" disabled={saving} className="btn-brand flex items-center gap-2 px-6 py-2.5 rounded-xl disabled:opacity-60">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShoppingCart className="w-4 h-4" />}
+            {saving ? 'جارٍ الحفظ...' : 'حفظ التعديلات'}
+          </button>
+          <Link href={`/subscriptions/${id}`} className="px-4 py-2.5 rounded-xl text-slate-400 hover:text-white bg-navy-700/60 hover:bg-navy-700 border border-white/6 transition-all text-sm">
+            إلغاء
+          </Link>
+        </div>
+      </motion.form>
+
+      <QuickAddCustomerModal
+        isOpen={showQuickAdd}
+        onClose={() => setShowQuickAdd(false)}
+        onCreated={(newCustomer) => {
+          setCustomers(prev => [newCustomer, ...prev])
+          setForm(prev => ({ ...prev, customerId: newCustomer.id }))
+        }}
+      />
+    </div>
+  )
+}

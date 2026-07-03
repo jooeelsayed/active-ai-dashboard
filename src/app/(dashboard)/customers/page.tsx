@@ -8,7 +8,8 @@ import toast from 'react-hot-toast'
 import {
   Users, Plus, Search, Filter, Trash2, Edit, Eye, Phone, Mail,
   ChevronLeft, ChevronRight, RefreshCw, Download, Upload,
-  FileSpreadsheet, X, CheckCircle2, AlertCircle, Loader2
+  FileSpreadsheet, X, CheckCircle2, AlertCircle, Loader2,
+  CheckSquare, Square, Minus
 } from 'lucide-react'
 import {
   formatDate, CUSTOMER_STATUS_LABELS,
@@ -290,6 +291,9 @@ export default function CustomersPage() {
   const [pages, setPages] = useState(1)
   const [userRole, setUserRole] = useState<string>('')
   const [showImport, setShowImport] = useState(false)
+  // Bulk selection
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkLoading, setBulkLoading] = useState(false)
 
   const page = parseInt(searchParams.get('page') ?? '1')
   const search = searchParams.get('search') ?? ''
@@ -319,7 +323,7 @@ export default function CustomersPage() {
     }
   }, [search, status, source, page])
 
-  useEffect(() => { fetchCustomers() }, [fetchCustomers])
+  useEffect(() => { fetchCustomers(); setSelected(new Set()) }, [fetchCustomers])
 
   useEffect(() => {
     fetch('/api/auth/session').then(r => r.json()).then(s => {
@@ -361,6 +365,28 @@ export default function CustomersPage() {
 
   const handleExport = () => {
     window.open('/api/export?type=customers', '_blank')
+  }
+
+  // Bulk helpers
+  const allIds = customers.map(c => c.id)
+  const allSelected = allIds.length > 0 && allIds.every(id => selected.has(id))
+  const someSelected = selected.size > 0 && !allSelected
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(allIds))
+  const toggleOne = (id: string) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+
+  const handleBulkDelete = async () => {
+    if (!confirm(`هل أنت متأكد من حذف ${selected.size} عميل؟ سيتم حذف جميع اشتراكاتهم ومدفوعاتهم.`)) return
+    setBulkLoading(true)
+    try {
+      const res = await fetch('/api/customers/bulk', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selected) }),
+      })
+      const data = await res.json()
+      if (res.ok) { toast.success(`تم حذف ${data.deleted} عميل`); fetchCustomers() }
+      else toast.error(data.error ?? 'فشل الحذف')
+    } catch { toast.error('حدث خطأ') } finally { setBulkLoading(false) }
   }
 
   return (
@@ -488,6 +514,13 @@ export default function CustomersPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-white/6">
+                  <th className="px-3 py-3 w-10">
+                    <button onClick={toggleAll} className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-white transition-colors">
+                      {allSelected ? <CheckSquare className="w-4 h-4 text-brand-cyan" /> :
+                        someSelected ? <Minus className="w-4 h-4 text-brand-cyan" /> :
+                        <Square className="w-4 h-4" />}
+                    </button>
+                  </th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">العميل</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide hidden md:table-cell">الاتصال</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">الحالة</th>
@@ -503,8 +536,13 @@ export default function CustomersPage() {
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.03 }}
-                    className="table-row-hover"
+                    className={cn('table-row-hover', selected.has(customer.id) && 'bg-brand-cyan/5')}
                   >
+                    <td className="px-3 py-3">
+                      <button onClick={() => toggleOne(customer.id)} className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-white transition-colors">
+                        {selected.has(customer.id) ? <CheckSquare className="w-4 h-4 text-brand-cyan" /> : <Square className="w-4 h-4" />}
+                      </button>
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-cyan/30 to-brand-lime/30 flex items-center justify-center flex-shrink-0">

@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
-import { Eye, EyeOff, Lock, Loader2, ArrowRight, ShoppingCart, Edit, RefreshCw } from 'lucide-react'
+import { Eye, EyeOff, Lock, Loader2, ArrowRight, ShoppingCart, Edit, Edit2, RefreshCw } from 'lucide-react'
 import {
   formatDate, formatCurrency, SUBSCRIPTION_STATUS_LABELS, SUBSCRIPTION_STATUS_COLORS,
   PAYMENT_STATUS_LABELS, PAYMENT_STATUS_COLORS, PAYMENT_METHOD_LABELS, cn
@@ -82,9 +82,14 @@ export default function SubscriptionDetailPage() {
             </p>
           </div>
         </div>
-        <button onClick={handleEdit} className="btn-brand flex items-center gap-2 px-3 py-2 rounded-xl text-sm">
-          <Edit className="w-4 h-4" /> تعديل
-        </button>
+        <div className="flex items-center gap-2">
+          <Link href={`/subscriptions/${id}/edit`} className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-brand-lime bg-brand-lime/10 hover:bg-brand-lime/20 border border-brand-lime/25 hover:border-brand-lime/50 transition-all">
+            <Edit2 className="w-4 h-4" /> تعديل كامل
+          </Link>
+          <button onClick={handleEdit} className="btn-brand flex items-center gap-2 px-3 py-2 rounded-xl text-sm">
+            <Edit className="w-4 h-4" /> تعديل سريع
+          </button>
+        </div>
       </div>
 
       {/* Main Info */}

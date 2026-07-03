@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
-import { Package, Plus, Edit, Trash2, ToggleLeft, ToggleRight, Loader2 } from 'lucide-react'
+import { Package, Plus, Edit, Trash2, ToggleLeft, ToggleRight, Loader2, CheckSquare, Square, Minus } from 'lucide-react'
 import { formatCurrency, PRODUCT_CATEGORY_LABELS, ACCOUNT_TYPE_LABELS, cn } from '@/lib/utils'
 
 interface Product {
@@ -30,11 +30,16 @@ export default function ProductsPage() {
     sellingPrice: '', costPrice: '', isActive: true, accountType: 'INDIVIDUAL', description: '',
   })
 
+  // Bulk Selection
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkLoading, setBulkLoading] = useState(false)
+
   const fetchProducts = async () => {
     setLoading(true)
     const res = await fetch('/api/products')
     const data = await res.json()
     setProducts(Array.isArray(data) ? data : [])
+    setSelected(new Set())
     setLoading(false)
   }
 
@@ -68,8 +73,39 @@ export default function ProductsPage() {
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`هل أنت متأكد من حذف المنتج "${name}"؟`)) return
     const res = await fetch(`/api/products/${id}`, { method: 'DELETE' })
-    if (res.ok) { toast.success('تم الحذف'); fetchProducts() }
-    else toast.error('فشل الحذف')
+    const data = await res.json()
+    if (res.ok) {
+      if (data.deactivated) toast.success(data.message)
+      else toast.success('تم الحذف')
+      fetchProducts()
+    } else toast.error('فشل الحذف')
+  }
+
+  // Bulk helpers
+  const allIds = products.map(p => p.id)
+  const allSelected = allIds.length > 0 && allIds.every(id => selected.has(id))
+  const someSelected = selected.size > 0 && !allSelected
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(allIds))
+  const toggleOne = (id: string) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+
+  const handleBulkAction = async (action: 'delete' | 'activate' | 'deactivate') => {
+    if (action === 'delete') {
+      if (!confirm(`هل أنت متأكد من حذف ${selected.size} منتج؟`)) return
+    }
+    setBulkLoading(true)
+    try {
+      const res = await fetch('/api/products/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selected), action }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        if (action === 'delete') toast.success(`تم حذف ${data.deleted} وإيقاف ${data.deactivated} منتج`)
+        else toast.success(`تم تحديث حالة ${data.affected} منتج`)
+        fetchProducts()
+      } else toast.error(data.error ?? 'فشل الإجراء')
+    } catch { toast.error('حدث خطأ') } finally { setBulkLoading(false) }
   }
 
   const canEdit = userRole === 'ADMIN' || userRole === 'MANAGER'
@@ -85,12 +121,61 @@ export default function ProductsPage() {
           </h1>
           <p className="text-slate-400 text-sm mt-1">{products.length} منتج مسجل</p>
         </div>
-        {canEdit && (
-          <button onClick={openNew} className="btn-brand flex items-center gap-2 px-4 py-2 rounded-xl text-sm">
-            <Plus className="w-4 h-4" />إضافة منتج
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {canEdit && (
+            <button onClick={openNew} className="btn-brand flex items-center gap-2 px-4 py-2 rounded-xl text-sm">
+              <Plus className="w-4 h-4" />إضافة منتج
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Bulk Actions Bar */}
+      <AnimatePresence>
+        {selected.size > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+            className="glass-card p-3 flex items-center gap-3 border border-brand-cyan/20 bg-brand-cyan/5"
+          >
+            <span className="text-sm font-bold text-brand-cyan">تم تحديد {selected.size}</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              {canEdit && (
+                <>
+                  <button onClick={() => handleBulkAction('activate')} disabled={bulkLoading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-lime/10 hover:bg-brand-lime/20 border border-brand-lime/25 text-brand-lime transition-all disabled:opacity-60">
+                    <ToggleRight className="w-3.5 h-3.5" /> تفعيل
+                  </button>
+                  <button onClick={() => handleBulkAction('deactivate')} disabled={bulkLoading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-500/10 hover:bg-slate-500/20 border border-slate-500/25 text-slate-300 transition-all disabled:opacity-60">
+                    <ToggleLeft className="w-3.5 h-3.5" /> تعطيل
+                  </button>
+                  <button onClick={() => handleBulkAction('delete')} disabled={bulkLoading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 text-red-400 transition-all disabled:opacity-60">
+                    <Trash2 className="w-3.5 h-3.5" /> حذف المحدد
+                  </button>
+                </>
+              )}
+              <button onClick={() => setSelected(new Set())} className="px-3 py-1.5 rounded-lg text-xs text-slate-500 hover:text-slate-300 transition-colors">
+                إلغاء التحديد
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Select All */}
+      {products.length > 0 && (
+        <div className="flex items-center px-2">
+          <button onClick={toggleAll} className="flex items-center gap-2 text-sm font-semibold text-slate-400 hover:text-white transition-colors">
+            <span className="w-5 h-5 flex items-center justify-center">
+              {allSelected ? <CheckSquare className="w-4 h-4 text-brand-cyan" /> :
+                someSelected ? <Minus className="w-4 h-4 text-brand-cyan" /> :
+                <Square className="w-4 h-4" />}
+            </span>
+            تحديد الكل
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -108,13 +193,22 @@ export default function ProductsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {products.map((product, i) => (
             <motion.div key={product.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}
-              className={cn('glass-card glass-card-hover p-5 space-y-3', !product.isActive && 'opacity-60')}>
+              onClick={() => toggleOne(product.id)}
+              className={cn('glass-card p-5 space-y-3 cursor-pointer border transition-all', 
+                !product.isActive && 'opacity-60',
+                selected.has(product.id) ? 'border-brand-cyan bg-brand-cyan/5 shadow-[0_0_15px_rgba(0,240,255,0.1)]' : 'border-white/6 hover:border-white/20'
+              )}>
               <div className="flex items-start justify-between">
-                <div>
-                  <p className="font-bold text-slate-100">{product.name}</p>
-                  <p className="text-xs text-slate-500">{product.provider}</p>
+                <div className="flex gap-2">
+                  <div className="mt-1">
+                    {selected.has(product.id) ? <CheckSquare className="w-4 h-4 text-brand-cyan" /> : <Square className="w-4 h-4 text-slate-500" />}
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-100">{product.name}</p>
+                    <p className="text-xs text-slate-500">{product.provider}</p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                   {canEdit && (
                     <>
                       <button onClick={() => openEdit(product)} className="p-1.5 rounded-lg text-slate-400 hover:text-brand-lime hover:bg-brand-lime/10 transition-all">
@@ -128,12 +222,12 @@ export default function ProductsPage() {
                   {product.isActive ? <ToggleRight className="w-4 h-4 text-brand-lime" /> : <ToggleLeft className="w-4 h-4 text-slate-500" />}
                 </div>
               </div>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-1.5 pl-6">
                 <span className="badge text-xs border-brand-cyan/20 text-brand-cyan bg-brand-cyan/10">{PRODUCT_CATEGORY_LABELS[product.category]}</span>
                 <span className="badge text-xs border-white/10 text-slate-400">{product.planName}</span>
                 <span className="badge text-xs border-white/10 text-slate-400">{product.durationDays} يوم</span>
               </div>
-              <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="grid grid-cols-3 gap-2 text-center pl-6">
                 <div>
                   <p className="text-sm font-bold text-brand-cyan">{formatCurrency(product.sellingPrice)}</p>
                   <p className="text-xs text-slate-600">البيع</p>
@@ -147,7 +241,7 @@ export default function ProductsPage() {
                   <p className="text-xs text-slate-600">الربح</p>
                 </div>
               </div>
-              <div className="flex items-center justify-between pt-1 border-t border-white/6">
+              <div className="flex items-center justify-between pt-1 border-t border-white/6 pl-6">
                 <span className="text-xs text-slate-500">{ACCOUNT_TYPE_LABELS[product.accountType]}</span>
                 <span className="text-xs text-brand-cyan font-semibold">{product._count.subscriptions} اشتراك</span>
               </div>
@@ -158,8 +252,9 @@ export default function ProductsPage() {
 
       {/* Add/Edit Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setModalOpen(false)}>
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+            onClick={e => e.stopPropagation()}
             className="glass-card w-full max-w-xl p-6 space-y-4 overflow-y-auto max-h-[90vh]">
             <h3 className="font-bold text-slate-100 text-lg">{form.id ? 'تعديل المنتج' : 'إضافة منتج جديد'}</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
