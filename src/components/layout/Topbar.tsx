@@ -3,12 +3,13 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, Menu, UserCircle, ChevronDown, LogOut, Settings } from 'lucide-react'
+import { Search, Plus, Menu, ChevronDown, LogOut, Settings, KeyRound } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import type { Role } from '@prisma/client'
 import NotificationBell from './NotificationBell'
+import ChangePasswordModal from '@/components/ChangePasswordModal'
 
 interface TopbarProps {
   user: {
@@ -31,6 +32,7 @@ export default function Topbar({ user, onMenuToggle }: TopbarProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false)
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -163,6 +165,18 @@ export default function Topbar({ user, onMenuToggle }: TopbarProps) {
                   )}
 
                   <button
+                    type="button"
+                    onClick={() => {
+                      setUserMenuOpen(false)
+                      setChangePasswordOpen(true)
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-colors"
+                  >
+                    <KeyRound className="w-4 h-4" />
+                    تغيير كلمة المرور
+                  </button>
+
+                  <button
                     onClick={() => signOut({ callbackUrl: '/login' })}
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
                   >
@@ -175,6 +189,11 @@ export default function Topbar({ user, onMenuToggle }: TopbarProps) {
           </AnimatePresence>
         </div>
       </div>
+
+      <ChangePasswordModal
+        isOpen={changePasswordOpen}
+        onClose={() => setChangePasswordOpen(false)}
+      />
     </header>
   )
 }

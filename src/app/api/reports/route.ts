@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { userHasPermission } from '@/lib/server-permissions'
+import { customerWhereForUser, paymentWhereForUser, subscriptionWhereForUser } from '@/lib/resource-access'
 import { startOfDay, endOfDay } from 'date-fns'
 
 export async function GET(request: Request) {
@@ -14,18 +16,27 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const from = searchParams.get('from')
   const to = searchParams.get('to')
-  const employeeId = searchParams.get('employeeId') ?? ''
+  const requestedEmployeeId = searchParams.get('employeeId') ?? ''
+  const employeeId = session.user.role === 'EMPLOYEE' ? session.user.id : requestedEmployeeId
 
-  const dateFilter: Record<string, unknown> = {}
+  const dateFilter: Prisma.DateTimeFilter = {}
   if (from) dateFilter.gte = startOfDay(new Date(from))
   if (to) dateFilter.lte = endOfDay(new Date(to))
 
-  const subWhere: Record<string, unknown> = {}
+  const subWhere: Prisma.SubscriptionWhereInput = {}
   if (from || to) subWhere.createdAt = dateFilter
   if (employeeId) subWhere.employeeId = employeeId
 
-  const payWhere: Record<string, unknown> = { status: 'PAID' }
+  const payWhere: Prisma.PaymentWhereInput = { status: 'PAID' }
   if (from || to) payWhere.paymentDate = dateFilter
+  if (employeeId) payWhere.subscription = { employeeId }
+
+  const scopedSubWhere = subscriptionWhereForUser(session.user, subWhere)
+  const scopedPayWhere = paymentWhereForUser(session.user, payWhere)
+  const scopedCustomerWhere = customerWhereForUser(
+    session.user,
+    employeeId ? { assignedToId: employeeId } : {}
+  )
 
   const [
     revenueTotal,
@@ -38,7 +49,7 @@ export async function GET(request: Request) {
     // Total revenue in period
     prisma.payment.aggregate({
       _sum: { amount: true },
-      where: payWhere,
+      where: scopedPayWhere,
     }),
 
     // Revenue by employee
@@ -46,7 +57,7 @@ export async function GET(request: Request) {
       by: ['employeeId'],
       _sum: { salePrice: true, costPrice: true },
       _count: { id: true },
-      where: subWhere,
+      where: scopedSubWhere,
     }),
 
     // Revenue by product
@@ -54,13 +65,14 @@ export async function GET(request: Request) {
       by: ['productId'],
       _sum: { salePrice: true },
       _count: { id: true },
-      where: subWhere,
+      where: scopedSubWhere,
     }),
 
     // Customers by source
     prisma.customer.groupBy({
       by: ['source'],
       _count: { id: true },
+      where: scopedCustomerWhere,
     }),
 
     // Payments by method
@@ -68,14 +80,14 @@ export async function GET(request: Request) {
       by: ['paymentMethod'],
       _sum: { amount: true },
       _count: { id: true },
-      where: payWhere,
+      where: scopedPayWhere,
     }),
 
     // Subscriptions by status
     prisma.subscription.groupBy({
       by: ['status'],
       _count: { id: true },
-      where: subWhere,
+      where: scopedSubWhere,
     }),
   ])
 

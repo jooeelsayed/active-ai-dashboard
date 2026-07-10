@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { userHasPermission } from '@/lib/server-permissions'
 import { addDays, startOfDay, endOfDay } from 'date-fns'
 
 export async function GET() {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!(await userHasPermission(session.user, 'subscriptions:read'))) {
+    return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
+  }
 
   const now = new Date()
   const today = startOfDay(now)
