@@ -3,11 +3,23 @@ import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
+function requireSeedPassword(name: 'SEED_ADMIN_PASSWORD' | 'SEED_MANAGER_PASSWORD') {
+  const value = process.env[name]
+  if (!value || value.length < 12) {
+    throw new Error(`${name} must be set and contain at least 12 characters`)
+  }
+  return value
+}
+
 async function main() {
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_PRODUCTION_SEED !== 'true') {
+    throw new Error('Production seeding is disabled. Set ALLOW_PRODUCTION_SEED=true only for an intentional run.')
+  }
+
   console.log('🌱 Starting seed...')
 
   // Create admin user
-  const adminPassword = await bcrypt.hash('Admin@123456', 12)
+  const adminPassword = await bcrypt.hash(requireSeedPassword('SEED_ADMIN_PASSWORD'), 12)
   const admin = await prisma.user.upsert({
     where: { email: 'admin@activeai.com' },
     update: {},
@@ -22,7 +34,7 @@ async function main() {
   console.log('✅ Admin user created:', admin.email)
 
   // Create a manager
-  const managerPassword = await bcrypt.hash('Manager@123', 12)
+  const managerPassword = await bcrypt.hash(requireSeedPassword('SEED_MANAGER_PASSWORD'), 12)
   const manager = await prisma.user.upsert({
     where: { email: 'manager@activeai.com' },
     update: {},
@@ -152,9 +164,7 @@ Active Ai — خدمات الذكاء الاصطناعي ✨`,
   console.log('✅ Sample customers seeded')
 
   console.log('\n🎉 Seed completed successfully!')
-  console.log('\n🔐 Login credentials:')
-  console.log('  Admin: admin@activeai.com / Admin@123456')
-  console.log('  Manager: manager@activeai.com / Manager@123')
+  console.log('\n🔐 Accounts created. Passwords were read from environment variables and were not printed.')
 }
 
 main()

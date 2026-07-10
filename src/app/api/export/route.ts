@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { hasPermission } from '@/lib/rbac'
+import { userHasPermission } from '@/lib/server-permissions'
 
 export async function GET(request: Request) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!hasPermission(session.user.role, 'reports:export')) {
+  if (!(await userHasPermission(session.user, 'reports:export'))) {
     return NextResponse.json({ error: 'ليس لديك صلاحية للتصدير' }, { status: 403 })
   }
 

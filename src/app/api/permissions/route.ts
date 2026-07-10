@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { hasPermission, DEFAULT_ROLE_PERMISSIONS, ROLE_MAX_PERMISSIONS, Permission } from '@/lib/rbac'
+import { ROLE_MAX_PERMISSIONS, Permission } from '@/lib/rbac'
+import { getEffectivePermissions, userHasPermission } from '@/lib/server-permissions'
+import { z } from 'zod'
 
 // ─── Helper: load Settings and parse rolePermissions JSON ────────────────
 async function loadOverrides(): Promise<{ settingsId: string | null; overrides: Record<string, Permission[]> }> {
@@ -31,27 +33,12 @@ export async function GET() {
     const role = session.user.role
     const { overrides } = await loadOverrides()
 
-    // ADMIN always gets everything
-    if (role === 'ADMIN') {
-      return NextResponse.json({ role, permissions: ROLE_MAX_PERMISSIONS.ADMIN, overrides })
-    }
-
-    const maxPerms = ROLE_MAX_PERMISSIONS[role as keyof typeof ROLE_MAX_PERMISSIONS] ?? []
-
-    // Per-user override (key: "user:userId") takes priority
-    const userKey = `user:${session.user.id}`
-    const userOverride = overrides[userKey] as Permission[] | undefined
-
-    let effectivePermissions: Permission[]
-    if (userOverride) {
-      effectivePermissions = userOverride.filter(p => maxPerms.includes(p))
-    } else if (overrides[role]) {
-      effectivePermissions = (overrides[role] as Permission[]).filter(p => maxPerms.includes(p))
-    } else {
-      effectivePermissions = DEFAULT_ROLE_PERMISSIONS[role] ?? []
-    }
-
-    return NextResponse.json({ role, permissions: effectivePermissions, overrides })
+    const permissions = await getEffectivePermissions(session.user)
+    return NextResponse.json({
+      role,
+      permissions,
+      ...(role === 'ADMIN' ? { overrides } : {}),
+    })
   } catch {
     return NextResponse.json({ error: 'خطأ في الخادم' }, { status: 500 })
   }
@@ -64,28 +51,37 @@ export async function GET() {
 export async function PATCH(request: Request) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!hasPermission(session.user.role, 'settings:update')) {
+  if (!(await userHasPermission(session.user, 'settings:update'))) {
     return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
   }
 
   try {
-    const body = await request.json()
+    const body: unknown = await request.json()
     const { settingsId, overrides } = await loadOverrides()
 
     // ── Per-user update ──────────────────────────────────
-    if (body.userId) {
-      const { userId, permissions, userRole } = body as {
-        userId: string; permissions: Permission[] | null; userRole?: string
-      }
+    const perUserSchema = z.object({
+      userId: z.string().min(1),
+      permissions: z.array(z.string()).nullable(),
+    })
+    const perUser = perUserSchema.safeParse(body)
+    if (perUser.success) {
+      const { userId, permissions } = perUser.data
+      const target = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { role: true },
+      })
+      if (!target) return NextResponse.json({ error: 'المستخدم غير موجود' }, { status: 404 })
 
       const userKey = `user:${userId}`
-      if (permissions === null || permissions === undefined) {
+      if (permissions === null) {
         // Reset: remove per-user override
         delete overrides[userKey]
       } else {
-        // Enforce ceiling against the user's actual role
-        const maxPerms = ROLE_MAX_PERMISSIONS[(userRole ?? 'EMPLOYEE') as keyof typeof ROLE_MAX_PERMISSIONS] ?? []
-        overrides[userKey] = permissions.filter(p => maxPerms.includes(p))
+        const maxPerms = ROLE_MAX_PERMISSIONS[target.role] ?? []
+        overrides[userKey] = permissions.filter((permission): permission is Permission =>
+          maxPerms.includes(permission as Permission)
+        )
       }
 
       await saveOverrides(settingsId, overrides)
@@ -93,19 +89,21 @@ export async function PATCH(request: Request) {
     }
 
     // ── Role-level update ────────────────────────────────
-    const { role, permissions } = body as { role: string; permissions: Permission[] }
-    if (!role || !Array.isArray(permissions)) {
+    const roleUpdate = z.object({
+      role: z.enum(['MANAGER', 'EMPLOYEE', 'READONLY']),
+      permissions: z.array(z.string()),
+    }).safeParse(body)
+    if (!roleUpdate.success) {
       return NextResponse.json({ error: 'بيانات غير صحيحة' }, { status: 400 })
     }
-    const maxPerms = ROLE_MAX_PERMISSIONS[role as keyof typeof ROLE_MAX_PERMISSIONS] ?? []
-    overrides[role] = permissions.filter(p => maxPerms.includes(p))
+    const { role, permissions } = roleUpdate.data
+    const maxPerms = ROLE_MAX_PERMISSIONS[role]
+    overrides[role] = permissions.filter((permission): permission is Permission =>
+      maxPerms.includes(permission as Permission)
+    )
     await saveOverrides(settingsId, overrides)
     return NextResponse.json({ success: true, overrides })
-  } catch (err: any) {
-    const msg = err?.message || '';
-    if (msg.includes('Settings.rolePermissions') || msg.includes('does not exist')) {
-      return NextResponse.json({ error: 'DB_NEEDS_PUSH', details: msg }, { status: 500 })
-    }
-    return NextResponse.json({ error: msg || 'خطأ في الخادم' }, { status: 500 })
+  } catch {
+    return NextResponse.json({ error: 'خطأ في الخادم' }, { status: 500 })
   }
 }

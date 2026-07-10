@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
-import { hasPermission } from '@/lib/rbac'
+import { userHasPermission } from '@/lib/server-permissions'
 import { logActivity } from '@/lib/activity'
 
 const updateSchema = z.object({
@@ -33,7 +33,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!hasPermission(session.user.role, 'products:update')) {
+  if (!(await userHasPermission(session.user, 'products:update'))) {
     return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
   }
 
@@ -69,7 +69,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!hasPermission(session.user.role, 'products:delete')) {
+  if (!(await userHasPermission(session.user, 'products:delete'))) {
     return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
   }
 

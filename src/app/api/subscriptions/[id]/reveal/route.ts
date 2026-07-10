@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { hasPermission } from '@/lib/rbac'
+import { userHasPermission } from '@/lib/server-permissions'
 import { decryptFields } from '@/lib/crypto'
 import { logActivity } from '@/lib/activity'
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!hasPermission(session.user.role, 'subscriptions:reveal_sensitive')) {
+  if (!(await userHasPermission(session.user, 'subscriptions:reveal_sensitive'))) {
     return NextResponse.json({ error: 'ليس لديك صلاحية للكشف عن البيانات الحساسة' }, { status: 403 })
   }
 

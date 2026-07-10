@@ -6,7 +6,7 @@ import toast from 'react-hot-toast'
 import {
   UserCog, Plus, Edit2, Power, Key, Trash2, Loader2,
   Shield, User, Mail, Phone, X, Eye, EyeOff, ChevronDown, ChevronUp,
-  Lock, Unlock, CheckCircle2, AlertTriangle, Save, RotateCcw, RefreshCw
+  Lock, Unlock, CheckCircle2, AlertTriangle, Save, RotateCcw
 } from 'lucide-react'
 import { formatDate, ROLE_LABELS, cn } from '@/lib/utils'
 import {
@@ -111,8 +111,6 @@ function EmployeeDrawer({ emp, myRole, onClose, onSaved }: {
   const [useCustomPerms, setUseCustomPerms] = useState(false)
   const [customPerms, setCustomPerms] = useState<Permission[]>([...(DEFAULT_ROLE_PERMISSIONS[emp.role] ?? [])])
   const [loadingPerms, setLoadingPerms] = useState(true)
-  const [dbNeedsPush, setDbNeedsPush] = useState(false)
-  const [pushingDb, setPushingDb] = useState(false)
 
   // Load this employee's current effective permissions + check if they have a custom override
   useEffect(() => {
@@ -174,34 +172,8 @@ function EmployeeDrawer({ emp, myRole, onClose, onSaved }: {
       })
       const data = await res.json()
       if (res.ok) { toast.success('تم حفظ الصلاحيات'); onSaved() }
-      else {
-        if (data.error === 'DB_NEEDS_PUSH') {
-          setDbNeedsPush(true)
-          toast.error('تحتاج قاعدة البيانات لتحديث (إضافة أعمدة الصلاحيات).')
-        } else {
-          toast.error(data.error ?? 'فشل الحفظ')
-        }
-      }
+      else toast.error(data.error ?? 'فشل الحفظ')
     } catch { toast.error('حدث خطأ') } finally { setSaving(false) }
-  }
-
-  const handleFixDb = async () => {
-    setPushingDb(true)
-    toast.loading('جاري تحديث قاعدة البيانات، يرجى الانتظار...', { id: 'db-push' })
-    try {
-      const res = await fetch('/api/setup-db')
-      const data = await res.json()
-      if (data.success) {
-        toast.success('تم التحديث بنجاح! جرب الحفظ الآن.', { id: 'db-push' })
-        setDbNeedsPush(false)
-      } else {
-        toast.error('حدث خطأ أثناء التحديث: ' + data.error, { id: 'db-push' })
-      }
-    } catch {
-      toast.error('حدث خطأ في الاتصال بالخادم', { id: 'db-push' })
-    } finally {
-      setPushingDb(false)
-    }
   }
 
   const handleTogglePerm = (perm: Permission, value: boolean) => {
@@ -398,22 +370,6 @@ function EmployeeDrawer({ emp, myRole, onClose, onSaved }: {
                         ))}
                       </div>
 
-                      {dbNeedsPush && (
-                        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 my-4 flex flex-col sm:flex-row gap-4 items-center justify-between">
-                          <div className="text-right">
-                            <h4 className="font-bold text-red-400">تحديث قاعدة البيانات مطلوب</h4>
-                            <p className="text-sm text-red-300/80 mt-1">ميزة الصلاحيات تتطلب تحديث جدول الإعدادات في قاعدة البيانات لإضافة الأعمدة الجديدة.</p>
-                          </div>
-                          <button
-                            onClick={handleFixDb}
-                            disabled={pushingDb}
-                            className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-bold flex items-center gap-2 whitespace-nowrap disabled:opacity-50"
-                          >
-                            {pushingDb ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                            تحديث الآن بنقرة واحدة
-                          </button>
-                        </div>
-                      )}
                     </>
                   )
                 ) : (

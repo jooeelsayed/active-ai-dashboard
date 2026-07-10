@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
@@ -27,11 +27,7 @@ export default function CustomerProfilePage() {
   const [noteContent, setNoteContent] = useState('')
   const [addingNote, setAddingNote] = useState(false)
 
-  useEffect(() => {
-    if (id) fetchCustomer()
-  }, [id])
-
-  const fetchCustomer = async () => {
+  const fetchCustomer = useCallback(async () => {
     setLoading(true)
     try {
       const res = await fetch(`/api/customers/${id}`)
@@ -46,7 +42,11 @@ export default function CustomerProfilePage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [id, router])
+
+  useEffect(() => {
+    if (id) fetchCustomer()
+  }, [id, fetchCustomer])
 
   const handleAddNote = async () => {
     if (!noteContent.trim()) return

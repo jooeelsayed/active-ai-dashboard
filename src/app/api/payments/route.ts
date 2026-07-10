@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
-import { hasPermission } from '@/lib/rbac'
+import { userHasPermission } from '@/lib/server-permissions'
 import { logActivity } from '@/lib/activity'
+import { customerWhereForUser, paymentWhereForUser, subscriptionWhereForUser } from '@/lib/resource-access'
+import type { Prisma } from '@prisma/client'
 
 const paymentSchema = z.object({
   customerId: z.string().min(1, 'العميل مطلوب'),
@@ -19,17 +21,21 @@ const paymentSchema = z.object({
 export async function GET(request: Request) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!(await userHasPermission(session.user, 'payments:read'))) {
+    return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
+  }
 
   const { searchParams } = new URL(request.url)
   const customerId = searchParams.get('customerId') ?? ''
   const subscriptionId = searchParams.get('subscriptionId') ?? ''
-  const page = parseInt(searchParams.get('page') ?? '1')
-  const limit = parseInt(searchParams.get('limit') ?? '20')
+  const page = Math.max(1, Number.parseInt(searchParams.get('page') ?? '1') || 1)
+  const limit = Math.min(100, Math.max(1, Number.parseInt(searchParams.get('limit') ?? '20') || 20))
   const skip = (page - 1) * limit
 
-  const where: Record<string, unknown> = {}
-  if (customerId) where.customerId = customerId
-  if (subscriptionId) where.subscriptionId = subscriptionId
+  const filters: Prisma.PaymentWhereInput = {}
+  if (customerId) filters.customerId = customerId
+  if (subscriptionId) filters.subscriptionId = subscriptionId
+  const where = paymentWhereForUser(session.user, filters)
 
   const [payments, total] = await Promise.all([
     prisma.payment.findMany({
@@ -52,13 +58,33 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!hasPermission(session.user.role, 'payments:create')) {
+  if (!(await userHasPermission(session.user, 'payments:create'))) {
     return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
   }
 
   try {
     const body = await request.json()
     const data = paymentSchema.parse(body)
+    const customer = await prisma.customer.findFirst({
+      where: customerWhereForUser(session.user, { id: data.customerId }),
+      select: { id: true },
+    })
+    if (!customer) {
+      return NextResponse.json({ error: 'العميل غير موجود أو غير مسموح به' }, { status: 403 })
+    }
+
+    if (data.subscriptionId) {
+      const subscription = await prisma.subscription.findFirst({
+        where: subscriptionWhereForUser(session.user, { id: data.subscriptionId }),
+        select: { customerId: true },
+      })
+      if (!subscription) {
+        return NextResponse.json({ error: 'الاشتراك غير موجود أو غير مسموح به' }, { status: 403 })
+      }
+      if (subscription.customerId !== data.customerId) {
+        return NextResponse.json({ error: 'الاشتراك لا يتبع هذا العميل' }, { status: 400 })
+      }
+    }
 
     const payment = await prisma.payment.create({
       data: {

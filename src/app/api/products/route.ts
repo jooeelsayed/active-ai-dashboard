@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
-import { hasPermission } from '@/lib/rbac'
+import { userHasPermission } from '@/lib/server-permissions'
 import { logActivity } from '@/lib/activity'
 
 const productSchema = z.object({
@@ -47,7 +47,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!hasPermission(session.user.role, 'products:create')) {
+  if (!(await userHasPermission(session.user, 'products:create'))) {
     return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
   }
 

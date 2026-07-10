@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { hasPermission } from '@/lib/rbac'
+import { userHasPermission } from '@/lib/server-permissions'
 import { logActivity } from '@/lib/activity'
 import { z } from 'zod'
 
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     const data = bulkSchema.parse(body)
 
     if (data.action === 'delete') {
-      if (!hasPermission(session.user.role, 'products:delete')) {
+      if (!(await userHasPermission(session.user, 'products:delete'))) {
         return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
       }
       
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     }
 
     if (data.action === 'activate' || data.action === 'deactivate') {
-      if (!hasPermission(session.user.role, 'products:update')) {
+      if (!(await userHasPermission(session.user, 'products:update'))) {
         return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
       }
       

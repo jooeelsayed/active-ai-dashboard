@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { BarChart3, Download, Calendar, TrendingUp, Users, Package } from 'lucide-react'
 import {
@@ -25,7 +25,7 @@ export default function ReportsPage() {
   const [employees, setEmployees] = useState<{ id: string; name: string }[]>([])
   const [employeeId, setEmployeeId] = useState('')
 
-  const fetchReport = async () => {
+  const fetchReport = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams({ from, to })
@@ -33,9 +33,9 @@ export default function ReportsPage() {
       const res = await fetch(`/api/reports?${params}`)
       setData(await res.json())
     } catch {} finally { setLoading(false) }
-  }
+  }, [employeeId, from, to])
 
-  useEffect(() => { fetchReport() }, [from, to, employeeId])
+  useEffect(() => { fetchReport() }, [fetchReport])
   useEffect(() => { fetch('/api/employees').then(r => r.json()).then(d => setEmployees(Array.isArray(d) ? d : [])) }, [])
 
   const handleExport = (type: string) => window.open(`/api/export?type=${type}`, '_blank')

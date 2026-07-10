@@ -129,7 +129,7 @@ export default function QuickAddCustomerModal({ isOpen, onClose, onCreated }: Pr
                       <label className="block text-xs font-semibold text-slate-300 mb-1">مصدر العميل</label>
                       <select className="input-brand" {...field('source')}>
                         <option value="OTHER">أخرى</option>
-                        <option value="FACEBOOK">فيسبوك</option>
+                        <option value="FACEBOOK">Meta Business / فيسبوك</option>
                         <option value="WHATSAPP">واتساب</option>
                         <option value="REFERRAL">إحالة</option>
                         <option value="WEBSITE">الموقع</option>

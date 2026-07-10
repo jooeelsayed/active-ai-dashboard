@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
-import { hasPermission } from '@/lib/rbac'
+import { userHasPermission } from '@/lib/server-permissions'
 import { logActivity } from '@/lib/activity'
+import { customerWhereForUser } from '@/lib/resource-access'
+import type { Prisma } from '@prisma/client'
 
 const customerSchema = z.object({
   name: z.string().min(2, 'الاسم مطلوب (٢ أحرف على الأقل)'),
@@ -22,20 +24,23 @@ const customerSchema = z.object({
 export async function GET(request: Request) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!(await userHasPermission(session.user, 'customers:read'))) {
+    return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
+  }
 
   const { searchParams } = new URL(request.url)
   const search = searchParams.get('search') ?? ''
   const status = searchParams.get('status') ?? ''
   const source = searchParams.get('source') ?? ''
   const assignedTo = searchParams.get('assignedTo') ?? ''
-  const page = parseInt(searchParams.get('page') ?? '1')
-  const limit = parseInt(searchParams.get('limit') ?? '20')
+  const page = Math.max(1, Number.parseInt(searchParams.get('page') ?? '1') || 1)
+  const limit = Math.min(100, Math.max(1, Number.parseInt(searchParams.get('limit') ?? '20') || 20))
   const skip = (page - 1) * limit
 
-  const where: Record<string, unknown> = {}
+  const filters: Prisma.CustomerWhereInput = {}
 
   if (search) {
-    where.OR = [
+    filters.OR = [
       { name: { contains: search, mode: 'insensitive' } },
       { phone: { contains: search } },
       { email: { contains: search, mode: 'insensitive' } },
@@ -43,15 +48,13 @@ export async function GET(request: Request) {
     ]
   }
 
-  if (status) where.status = status
-  if (source) where.source = source
+  const parsedStatus = z.enum(['NEW', 'ACTIVE', 'WAITING', 'PROBLEM', 'BLOCKED', 'OLD']).safeParse(status)
+  const parsedSource = z.enum(['FACEBOOK', 'WHATSAPP', 'REFERRAL', 'WEBSITE', 'TIKTOK', 'OTHER']).safeParse(source)
+  if (parsedStatus.success) filters.status = parsedStatus.data
+  if (parsedSource.success) filters.source = parsedSource.data
+  if (assignedTo && session.user.role !== 'EMPLOYEE') filters.assignedToId = assignedTo
 
-  // Employees only see their assigned customers
-  if (session.user.role === 'EMPLOYEE') {
-    where.assignedToId = session.user.id
-  } else if (assignedTo) {
-    where.assignedToId = assignedTo
-  }
+  const where = customerWhereForUser(session.user, filters)
 
   const [customers, total] = await Promise.all([
     prisma.customer.findMany({
@@ -73,7 +76,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!hasPermission(session.user.role, 'customers:create')) {
+  if (!(await userHasPermission(session.user, 'customers:create'))) {
     return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
   }
 
@@ -86,7 +89,9 @@ export async function POST(request: Request) {
         ...data,
         email: data.email || null,
         createdById: session.user.id,
-        assignedToId: data.assignedToId || session.user.id,
+        assignedToId: session.user.role === 'EMPLOYEE'
+          ? session.user.id
+          : data.assignedToId || session.user.id,
       },
     })
 

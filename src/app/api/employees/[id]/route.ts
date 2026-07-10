@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { hasPermission, ROLE_MAX_PERMISSIONS, type Permission } from '@/lib/rbac'
+import { canManageEmployee, ROLE_MAX_PERMISSIONS, type Permission } from '@/lib/rbac'
+import { userHasPermission } from '@/lib/server-permissions'
 import { logActivity } from '@/lib/activity'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
@@ -9,7 +10,7 @@ import { z } from 'zod'
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!hasPermission(session.user.role, 'employees:read')) {
+  if (!(await userHasPermission(session.user, 'employees:read'))) {
     return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
   }
 
@@ -30,7 +31,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!hasPermission(session.user.role, 'employees:update')) {
+  if (!(await userHasPermission(session.user, 'employees:update'))) {
     return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
   }
 
@@ -49,11 +50,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   try {
     const data = updateSchema.parse(body)
 
-    // Manager can't update admins
     const target = await prisma.user.findUnique({ where: { id } })
     if (!target) return NextResponse.json({ error: 'غير موجود' }, { status: 404 })
-    if (session.user.role === 'MANAGER' && target.role === 'ADMIN') {
-      return NextResponse.json({ error: 'لا يمكنك تعديل حساب المدير العام' }, { status: 403 })
+
+    if (!canManageEmployee(session.user.role, target.role)) {
+      return NextResponse.json({ error: 'لا يمكنك تعديل هذا الحساب' }, { status: 403 })
+    }
+    if (data.role && !canManageEmployee(session.user.role, data.role)) {
+      return NextResponse.json({ error: 'لا يمكنك منح هذا الدور' }, { status: 403 })
+    }
+    if (id === session.user.id && (data.role !== undefined || data.isActive !== undefined)) {
+      return NextResponse.json({ error: 'لا يمكنك تغيير دور حسابك أو تعطيله' }, { status: 400 })
     }
 
     // Build update payload
@@ -63,7 +70,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (data.role !== undefined) updateData.role = data.role
     if (data.isActive !== undefined) updateData.isActive = data.isActive
     if (data.phone !== undefined) updateData.phone = data.phone
-    // permissionsOverride stored in Settings table (requires prisma db push for User column)
     if (data.password) {
       // Only ADMIN can reset passwords
       if (session.user.role !== 'ADMIN') {
@@ -112,12 +118,17 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const target = await prisma.user.findUnique({ where: { id } })
   if (!target) return NextResponse.json({ error: 'غير موجود' }, { status: 404 })
 
-  // Unlink relations before delete
-  await prisma.customer.updateMany({ where: { assignedToId: id }, data: { assignedToId: null } })
-  await prisma.customer.updateMany({ where: { createdById: id }, data: { createdById: null } })
-  await prisma.subscription.updateMany({ where: { employeeId: id }, data: { employeeId: null } })
-
-  await prisma.user.delete({ where: { id } })
+  await prisma.$transaction([
+    prisma.customer.updateMany({ where: { assignedToId: id }, data: { assignedToId: null } }),
+    prisma.customer.updateMany({ where: { createdById: id }, data: { createdById: null } }),
+    prisma.subscription.updateMany({ where: { employeeId: id }, data: { employeeId: null } }),
+    prisma.payment.updateMany({ where: { recordedById: id }, data: { recordedById: null } }),
+    prisma.note.updateMany({ where: { authorId: id }, data: { authorId: null } }),
+    prisma.task.updateMany({ where: { assignedToId: id }, data: { assignedToId: null } }),
+    prisma.task.updateMany({ where: { createdById: id }, data: { createdById: null } }),
+    prisma.activityLog.updateMany({ where: { userId: id }, data: { userId: null } }),
+    prisma.user.delete({ where: { id } }),
+  ])
 
   await logActivity({
     userId: session.user.id,

@@ -1,15 +1,16 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { hasPermission } from '@/lib/rbac'
+import { userHasPermission } from '@/lib/server-permissions'
 import { logActivity } from '@/lib/activity'
 import { z } from 'zod'
+import { subscriptionWhereForUser } from '@/lib/resource-access'
 
 const bulkSchema = z.object({
-  ids: z.array(z.string()).min(1),
+  ids: z.array(z.string()).min(1).max(100),
   action: z.enum(['delete', 'update_status', 'update_payment']),
-  status: z.string().optional(),
-  paymentStatus: z.string().optional(),
+  status: z.enum(['ACTIVE', 'EXPIRING_SOON', 'EXPIRED', 'CANCELLED', 'PENDING_SETUP']).optional(),
+  paymentStatus: z.enum(['PAID', 'PARTIALLY_PAID', 'UNPAID', 'REFUNDED']).optional(),
 })
 
 export async function POST(request: Request) {
@@ -19,18 +20,25 @@ export async function POST(request: Request) {
   try {
     const body = await request.json()
     const data = bulkSchema.parse(body)
+    const ids = [...new Set(data.ids)]
+    const scopedWhere = subscriptionWhereForUser(session.user, { id: { in: ids } })
+    const allowed = await prisma.subscription.count({ where: scopedWhere })
+    if (allowed !== ids.length) {
+      return NextResponse.json({ error: 'بعض الاشتراكات غير موجودة أو غير مسموح بها' }, { status: 403 })
+    }
 
     if (data.action === 'delete') {
-      if (!hasPermission(session.user.role, 'subscriptions:delete')) {
+      if (!(await userHasPermission(session.user, 'subscriptions:delete'))) {
         return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
       }
       
       // Unlink to prevent foreign key errors
-      await prisma.payment.updateMany({ where: { subscriptionId: { in: data.ids } }, data: { subscriptionId: null } })
-      await prisma.note.updateMany({ where: { subscriptionId: { in: data.ids } }, data: { subscriptionId: null } })
-      await prisma.task.updateMany({ where: { subscriptionId: { in: data.ids } }, data: { subscriptionId: null } })
-
-      const result = await prisma.subscription.deleteMany({ where: { id: { in: data.ids } } })
+      const [, , , result] = await prisma.$transaction([
+        prisma.payment.updateMany({ where: { subscriptionId: { in: ids } }, data: { subscriptionId: null } }),
+        prisma.note.updateMany({ where: { subscriptionId: { in: ids } }, data: { subscriptionId: null } }),
+        prisma.task.updateMany({ where: { subscriptionId: { in: ids } }, data: { subscriptionId: null } }),
+        prisma.subscription.deleteMany({ where: scopedWhere }),
+      ])
       await logActivity({
         userId: session.user.id, userName: session.user.name,
         action: 'SUBSCRIPTIONS_BULK_DELETED', entityType: 'Subscription',
@@ -40,23 +48,23 @@ export async function POST(request: Request) {
     }
 
     if (data.action === 'update_status' && data.status) {
-      if (!hasPermission(session.user.role, 'subscriptions:update')) {
+      if (!(await userHasPermission(session.user, 'subscriptions:update'))) {
         return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
       }
       const result = await prisma.subscription.updateMany({
-        where: { id: { in: data.ids } },
-        data: { status: data.status as never },
+        where: scopedWhere,
+        data: { status: data.status },
       })
       return NextResponse.json({ affected: result.count })
     }
 
     if (data.action === 'update_payment' && data.paymentStatus) {
-      if (!hasPermission(session.user.role, 'subscriptions:update')) {
+      if (!(await userHasPermission(session.user, 'subscriptions:update'))) {
         return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
       }
       const result = await prisma.subscription.updateMany({
-        where: { id: { in: data.ids } },
-        data: { paymentStatus: data.paymentStatus as never },
+        where: scopedWhere,
+        data: { paymentStatus: data.paymentStatus },
       })
       return NextResponse.json({ affected: result.count })
     }

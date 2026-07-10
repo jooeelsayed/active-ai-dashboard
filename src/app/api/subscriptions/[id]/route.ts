@@ -1,19 +1,23 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { hasPermission } from '@/lib/rbac'
+import { userHasPermission } from '@/lib/server-permissions'
 import { logActivity } from '@/lib/activity'
 import { decryptFields } from '@/lib/crypto'
 import { z } from 'zod'
 import { encryptFields } from '@/lib/crypto'
+import { subscriptionWhereForUser } from '@/lib/resource-access'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!(await userHasPermission(session.user, 'subscriptions:read'))) {
+    return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
+  }
 
   const { id } = await params
-  const sub = await prisma.subscription.findUnique({
-    where: { id },
+  const sub = await prisma.subscription.findFirst({
+    where: subscriptionWhereForUser(session.user, { id }),
     include: {
       customer: { select: { id: true, name: true, phone: true, whatsapp: true } },
       product: true,
@@ -36,7 +40,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!hasPermission(session.user.role, 'subscriptions:update')) {
+  if (!(await userHasPermission(session.user, 'subscriptions:update'))) {
     return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
   }
 
@@ -61,6 +65,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   try {
     const body = await request.json()
     const data = updateSchema.parse(body)
+    const existing = await prisma.subscription.findFirst({
+      where: subscriptionWhereForUser(session.user, { id }),
+      select: { id: true },
+    })
+    if (!existing) return NextResponse.json({ error: 'الاشتراك غير موجود' }, { status: 404 })
+    if (session.user.role === 'EMPLOYEE' && data.employeeId !== undefined) {
+      return NextResponse.json({ error: 'لا يمكنك إعادة تعيين الاشتراك' }, { status: 403 })
+    }
 
     const updateData: Record<string, unknown> = { ...data }
     if (data.startDate) updateData.startDate = new Date(data.startDate)
@@ -69,7 +81,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     // Handle sensitive fields
     if ('loginEmail' in data || 'loginPassword' in data || 'licenseKey' in data || 'accessLink' in data) {
-      if (!hasPermission(session.user.role, 'subscriptions:reveal_sensitive')) {
+      if (!(await userHasPermission(session.user, 'subscriptions:reveal_sensitive'))) {
         return NextResponse.json({ error: 'ليس لديك صلاحية لتعديل البيانات الحساسة' }, { status: 403 })
       }
       const encrypted = encryptFields({
@@ -108,7 +120,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!hasPermission(session.user.role, 'subscriptions:delete')) {
+  if (!(await userHasPermission(session.user, 'subscriptions:delete'))) {
     return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
   }
 

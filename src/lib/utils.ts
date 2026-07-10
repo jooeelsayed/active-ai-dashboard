@@ -95,7 +95,7 @@ export const CUSTOMER_STATUS_COLORS: Record<string, string> = {
 }
 
 export const CUSTOMER_SOURCE_LABELS: Record<string, string> = {
-  FACEBOOK: 'فيسبوك',
+  FACEBOOK: 'Meta Business / فيسبوك',
   WHATSAPP: 'واتساب',
   REFERRAL: 'إحالة',
   WEBSITE: 'الموقع الإلكتروني',

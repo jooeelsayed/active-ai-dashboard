@@ -2,9 +2,11 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
-import { hasPermission } from '@/lib/rbac'
+import { userHasPermission } from '@/lib/server-permissions'
 import { logActivity } from '@/lib/activity'
 import { encryptFields } from '@/lib/crypto'
+import { customerWhereForUser, subscriptionWhereForUser } from '@/lib/resource-access'
+import type { Prisma } from '@prisma/client'
 
 const subscriptionSchema = z.object({
   customerId: z.string().min(1, 'العميل مطلوب'),
@@ -28,6 +30,9 @@ const subscriptionSchema = z.object({
 export async function GET(request: Request) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!(await userHasPermission(session.user, 'subscriptions:read'))) {
+    return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
+  }
 
   const { searchParams } = new URL(request.url)
   const search = searchParams.get('search') ?? ''
@@ -35,23 +40,26 @@ export async function GET(request: Request) {
   const paymentStatus = searchParams.get('paymentStatus') ?? ''
   const customerId = searchParams.get('customerId') ?? ''
   const category = searchParams.get('category') ?? ''
-  const page = parseInt(searchParams.get('page') ?? '1')
-  const limit = parseInt(searchParams.get('limit') ?? '20')
+  const page = Math.max(1, Number.parseInt(searchParams.get('page') ?? '1') || 1)
+  const limit = Math.min(100, Math.max(1, Number.parseInt(searchParams.get('limit') ?? '20') || 20))
   const skip = (page - 1) * limit
 
-  const where: Record<string, unknown> = {}
+  const filters: Prisma.SubscriptionWhereInput = {}
 
   if (search) {
-    where.OR = [
+    filters.OR = [
       { customer: { name: { contains: search, mode: 'insensitive' } } },
       { product: { name: { contains: search, mode: 'insensitive' } } },
     ]
   }
-  if (status) where.status = status
-  if (paymentStatus) where.paymentStatus = paymentStatus
-  if (customerId) where.customerId = customerId
-  if (category) where.product = { category }
-  if (session.user.role === 'EMPLOYEE') where.employeeId = session.user.id
+  const parsedStatus = z.enum(['ACTIVE', 'EXPIRING_SOON', 'EXPIRED', 'CANCELLED', 'PENDING_SETUP']).safeParse(status)
+  const parsedPaymentStatus = z.enum(['PAID', 'PARTIALLY_PAID', 'UNPAID', 'REFUNDED']).safeParse(paymentStatus)
+  const parsedCategory = z.enum(['CHATBOT', 'DESIGN', 'VIDEO', 'AUDIO', 'PRODUCTIVITY', 'CODING', 'OTHER']).safeParse(category)
+  if (parsedStatus.success) filters.status = parsedStatus.data
+  if (parsedPaymentStatus.success) filters.paymentStatus = parsedPaymentStatus.data
+  if (customerId) filters.customerId = customerId
+  if (parsedCategory.success) filters.product = { category: parsedCategory.data }
+  const where = subscriptionWhereForUser(session.user, filters)
 
   const [subscriptions, total] = await Promise.all([
     prisma.subscription.findMany({
@@ -78,13 +86,20 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!hasPermission(session.user.role, 'subscriptions:create')) {
+  if (!(await userHasPermission(session.user, 'subscriptions:create'))) {
     return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
   }
 
   try {
     const body = await request.json()
     const data = subscriptionSchema.parse(body)
+    const customer = await prisma.customer.findFirst({
+      where: customerWhereForUser(session.user, { id: data.customerId }),
+      select: { id: true },
+    })
+    if (!customer) {
+      return NextResponse.json({ error: 'العميل غير موجود أو غير مسموح به' }, { status: 403 })
+    }
 
     const encrypted = encryptFields({
       loginEmail: data.loginEmail,
@@ -97,7 +112,9 @@ export async function POST(request: Request) {
       data: {
         customerId: data.customerId,
         productId: data.productId,
-        employeeId: data.employeeId || session.user.id,
+        employeeId: session.user.role === 'EMPLOYEE'
+          ? session.user.id
+          : data.employeeId || session.user.id,
         startDate: new Date(data.startDate),
         endDate: new Date(data.endDate),
         renewalReminderDate: data.renewalReminderDate ? new Date(data.renewalReminderDate) : null,

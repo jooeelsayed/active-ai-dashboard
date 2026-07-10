@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
-import { hasPermission } from '@/lib/rbac'
+import { userHasPermission } from '@/lib/server-permissions'
 import { logActivity } from '@/lib/activity'
+import { customerWhereForUser } from '@/lib/resource-access'
 
 const updateSchema = z.object({
   name: z.string().min(2).optional(),
@@ -22,10 +23,13 @@ const updateSchema = z.object({
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!(await userHasPermission(session.user, 'customers:read'))) {
+    return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
+  }
 
   const { id } = await params
-  const customer = await prisma.customer.findUnique({
-    where: { id },
+  const customer = await prisma.customer.findFirst({
+    where: customerWhereForUser(session.user, { id }),
     include: {
       assignedTo: { select: { id: true, name: true } },
       createdBy: { select: { id: true, name: true } },
@@ -56,18 +60,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   if (!customer) return NextResponse.json({ error: 'العميل غير موجود' }, { status: 404 })
 
-  // Employee can only see their assigned customers
-  if (session.user.role === 'EMPLOYEE' && customer.assignedToId !== session.user.id) {
-    return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
-  }
-
   return NextResponse.json(customer)
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!hasPermission(session.user.role, 'customers:update')) {
+  if (!(await userHasPermission(session.user, 'customers:update'))) {
     return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
   }
 
@@ -75,6 +74,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   try {
     const body = await request.json()
     const data = updateSchema.parse(body)
+    const existing = await prisma.customer.findFirst({
+      where: customerWhereForUser(session.user, { id }),
+      select: { id: true },
+    })
+    if (!existing) return NextResponse.json({ error: 'العميل غير موجود' }, { status: 404 })
+    if (session.user.role === 'EMPLOYEE' && data.assignedToId !== undefined) {
+      return NextResponse.json({ error: 'لا يمكنك إعادة تعيين العميل' }, { status: 403 })
+    }
 
     const customer = await prisma.customer.update({
       where: { id },
@@ -102,7 +109,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!hasPermission(session.user.role, 'customers:delete')) {
+  if (!(await userHasPermission(session.user, 'customers:delete'))) {
     return NextResponse.json({ error: 'ليس لديك صلاحية' }, { status: 403 })
   }
 

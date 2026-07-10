@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
-import { UserPlus, Loader2, ArrowRight } from 'lucide-react'
+import { UserPlus, Loader2, ArrowRight, Facebook } from 'lucide-react'
 import Link from 'next/link'
+import MetaImportModal from '@/components/MetaImportModal'
 
 interface Employee { id: string; name: string }
 
@@ -13,6 +14,7 @@ export default function NewCustomerPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [employees, setEmployees] = useState<Employee[]>([])
+  const [showMetaImport, setShowMetaImport] = useState(false)
   const [form, setForm] = useState({
     name: '', phone: '', whatsapp: '', email: '', company: '', address: '',
     source: 'OTHER', status: 'NEW', internalNote: '', tags: '', assignedToId: '',
@@ -72,6 +74,20 @@ export default function NewCustomerPage() {
         </div>
       </div>
 
+      <button
+        type="button"
+        onClick={() => setShowMetaImport(true)}
+        className="glass-card w-full p-4 rounded-xl border border-blue-500/20 bg-blue-500/5 hover:bg-blue-500/10 transition-all flex items-center justify-between gap-4 text-right"
+      >
+        <span>
+          <span className="block text-sm font-bold text-white">استيراد عملاء من Meta Business</span>
+          <span className="block text-xs text-slate-500 mt-1">اسحب Leads من نماذج Meta Lead Ads مباشرة كعملاء جدد</span>
+        </span>
+        <span className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center flex-shrink-0">
+          <Facebook className="w-5 h-5 text-blue-400" />
+        </span>
+      </button>
+
       <motion.form
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -117,7 +133,7 @@ export default function NewCustomerPage() {
               <label className="block text-sm font-semibold text-slate-300 mb-1.5">مصدر العميل</label>
               <select className="input-brand" {...field('source')}>
                 <option value="OTHER">أخرى</option>
-                <option value="FACEBOOK">فيسبوك</option>
+                <option value="FACEBOOK">Meta Business / فيسبوك</option>
                 <option value="WHATSAPP">واتساب</option>
                 <option value="REFERRAL">إحالة</option>
                 <option value="WEBSITE">الموقع الإلكتروني</option>
@@ -175,6 +191,12 @@ export default function NewCustomerPage() {
           </Link>
         </div>
       </motion.form>
+
+      <MetaImportModal
+        isOpen={showMetaImport}
+        onClose={() => setShowMetaImport(false)}
+        onDone={() => router.push('/customers')}
+      />
     </div>
   )
 }

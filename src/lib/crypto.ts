@@ -6,34 +6,30 @@ const KEY_LENGTH = 32
 function getKey(): Buffer {
   const key = process.env.ENCRYPTION_KEY
   if (!key) throw new Error('ENCRYPTION_KEY environment variable is not set')
-  if (key.length < KEY_LENGTH) {
-    return Buffer.from(key.padEnd(KEY_LENGTH, '0').slice(0, KEY_LENGTH))
+  const keyBytes = Buffer.from(key, 'utf8')
+  if (keyBytes.length < KEY_LENGTH) {
+    throw new Error('ENCRYPTION_KEY must be at least 32 bytes')
   }
-  return Buffer.from(key.slice(0, KEY_LENGTH))
+  return keyBytes.subarray(0, KEY_LENGTH)
 }
 
 export function encrypt(text: string): string {
   if (!text) return ''
-  try {
-    const key = getKey()
-    const iv = crypto.randomBytes(16)
-    const cipher = crypto.createCipheriv(ALGORITHM, key, iv)
-    
-    let encrypted = cipher.update(text, 'utf8', 'hex')
-    encrypted += cipher.final('hex')
-    
-    const authTag = cipher.getAuthTag()
-    
-    return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`
-  } catch {
-    return ''
-  }
+  const key = getKey()
+  const iv = crypto.randomBytes(16)
+  const cipher = crypto.createCipheriv(ALGORITHM, key, iv)
+
+  let encrypted = cipher.update(text, 'utf8', 'hex')
+  encrypted += cipher.final('hex')
+
+  const authTag = cipher.getAuthTag()
+  return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`
 }
 
 export function decrypt(encryptedText: string): string {
   if (!encryptedText) return ''
+  const key = getKey()
   try {
-    const key = getKey()
     const parts = encryptedText.split(':')
     if (parts.length !== 3) return ''
     
