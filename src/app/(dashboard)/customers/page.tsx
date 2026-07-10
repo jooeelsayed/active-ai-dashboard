@@ -446,24 +446,20 @@ export default function CustomersPage() {
               <span className="hidden sm:inline">تصدير CSV</span>
             </button>
           )}
-          {can('customers:create') && (
-            <>
-              <button
-                onClick={() => setShowMetaImport(true)}
-                className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-blue-300 hover:text-blue-100 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 hover:border-blue-500/50 transition-all"
-              >
-                <Facebook className="w-4 h-4" />
-                <span className="hidden sm:inline">استيراد من Meta</span>
-              </button>
-              <button
-                onClick={() => setShowImport(true)}
-                className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-green-300 hover:text-green-100 bg-green-500/10 hover:bg-green-500/20 border border-green-500/25 hover:border-green-500/50 transition-all"
-              >
-                <FileSpreadsheet className="w-4 h-4" />
-                <span className="hidden sm:inline">استيراد Excel</span>
-              </button>
-            </>
-          )}
+          <button
+            onClick={() => setShowMetaImport(true)}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-blue-300 hover:text-blue-100 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 hover:border-blue-500/50 transition-all"
+          >
+            <Facebook className="w-4 h-4" />
+            <span className="hidden sm:inline">استيراد من Meta</span>
+          </button>
+          <button
+            onClick={() => setShowImport(true)}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-green-300 hover:text-green-100 bg-green-500/10 hover:bg-green-500/20 border border-green-500/25 hover:border-green-500/50 transition-all"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span className="hidden sm:inline">استيراد Excel</span>
+          </button>
           <Link
             href="/customers/new"
             className="btn-brand flex items-center gap-2 px-4 py-2 rounded-xl text-sm"
@@ -609,24 +605,20 @@ export default function CustomersPage() {
                 <Plus className="w-4 h-4" />
                 إضافة عميل
               </Link>
-              {can('customers:create') && (
-                <>
-                  <button
-                    onClick={() => setShowMetaImport(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-blue-300 bg-blue-500/10 border border-blue-500/25 hover:bg-blue-500/20 transition-all"
-                  >
-                    <Facebook className="w-4 h-4" />
-                    استيراد من Meta
-                  </button>
-                  <button
-                    onClick={() => setShowImport(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-green-300 bg-green-500/10 border border-green-500/25 hover:bg-green-500/20 transition-all"
-                  >
-                    <FileSpreadsheet className="w-4 h-4" />
-                    استيراد Excel
-                  </button>
-                </>
-              )}
+              <button
+                onClick={() => setShowMetaImport(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-blue-300 bg-blue-500/10 border border-blue-500/25 hover:bg-blue-500/20 transition-all"
+              >
+                <Facebook className="w-4 h-4" />
+                استيراد من Meta
+              </button>
+              <button
+                onClick={() => setShowImport(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-green-300 bg-green-500/10 border border-green-500/25 hover:bg-green-500/20 transition-all"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                استيراد Excel
+              </button>
             </div>
           </div>
         ) : (
